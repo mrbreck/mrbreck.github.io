@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fed Severance Pay Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            margin: auto;
+            background-color: #f7f7f7;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        label {
+            display: block;
+            margin: 15px 0 5px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .age-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .age-container label {
+            white-space: nowrap;
+        }
+
+        .age-container input {
+            width: 60px;
+            padding: 8px;
+        }
+
+        .results {
+            background-color: #e7f7e1;
+            padding: 15px;
+            margin-top: 20px;
+            border: 1px solid #d5e8d4;
+        }
+
+        .accordion {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            padding: 10px;
+            width: 100%;
+            border: none;
+            text-align: left;
+            outline: none;
+            font-size: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+
+        .panel {
+            background-color: #f1f1f1;
+            padding: 10px;
+            display: none;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Fed Severance Pay Calculator</h1>
+        <form id="severance-form">
+            <label for="annualPay">Annual Pay ($):</label>
+            <input type="number" id="annualPay" required min="0">
+
+            <label for="yearsOfService">Years of Service:</label>
+            <input type="number" id="yearsOfService" required min="0">
+
+            <label for="age-container">Age:</label>
+            <div class="age-container" id="age-container">
+                <input type="number" id="ageYears" required min="0" placeholder="Years"> years and
+                <input type="number" id="ageMonths" required min="0" max="11" placeholder="Months"> months
+            </div>
+            <p />
+            <button type="button" onclick="calculateSeverance()">Calculate</button>
+        </form>
+
+        <div class="results" id="results" style="display: none;">
+            <h2>Severance Calculation Results</h2>
+            <div id="standardResults"></div>
+
+            <!-- Accordion Section for Detailed Results -->
+            <button class="accordion">Show Details</button>
+            <div class="panel" id="detailedResults" style="display: none;">
+                <p id="weeklyRate"></p>
+                <p id="adjustedYears"></p>
+                <p id="basicSeverance"></p>
+                <p id="ageAdjustmentFactor"></p>
+                <p id="adjustedSeverancePay"></p>
+                <p id="maximumSeverance"></p>
+                <p id="totalSeveranceFund"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Age adjustment factors table
+        const ageFactors = [
+            { years: 40, months: "3-5", factor: 1.025 },
+            { years: 40, months: "6-8", factor: 1.050 },
+            { years: 40, months: "9-11", factor: 1.075 },
+            { years: 41, months: "0-2", factor: 1.100 },
+            { years: 41, months: "3-5", factor: 1.125 },
+            { years: 41, months: "6-8", factor: 1.150 },
+            { years: 41, months: "9-11", factor: 1.175 },
+            { years: 42, months: "0-2", factor: 1.200 },
+            { years: 42, months: "3-5", factor: 1.225 },
+            { years: 42, months: "6-8", factor: 1.250 },
+            { years: 42, months: "9-11", factor: 1.275 },
+            { years: 43, months: "0-2", factor: 1.300 },
+            { years: 43, months: "3-5", factor: 1.325 },
+            { years: 43, months: "6-8", factor: 1.350 },
+            { years: 43, months: "9-11", factor: 1.375 },
+            { years: 44, months: "0-2", factor: 1.400 },
+            { years: 44, months: "3-5", factor: 1.425 },
+            { years: 44, months: "6-8", factor: 1.450 },
+            { years: 44, months: "9-11", factor: 1.475 },
+            { years: 45, months: "0-2", factor: 1.500 },
+            { years: 45, months: "3-5", factor: 1.525 },
+            { years: 45, months: "6-8", factor: 1.550 },
+            { years: 45, months: "9-11", factor: 1.575 },
+            { years: 46, months: "0-2", factor: 1.600 },
+            { years: 46, months: "3-5", factor: 1.625 },
+            { years: 46, months: "6-8", factor: 1.650 },
+            { years: 46, months: "9-11", factor: 1.675 },
+            { years: 47, months: "0-2", factor: 1.700 },
+            { years: 47, months: "3-5", factor: 1.725 },
+            { years: 47, months: "6-8", factor: 1.750 },
+            { years: 47, months: "9-11", factor: 1.775 },
+            { years: 48, months: "0-2", factor: 1.800 },
+            { years: 48, months: "3-5", factor: 1.825 },
+            { years: 48, months: "6-8", factor: 1.850 },
+            { years: 48, months: "9-11", factor: 1.875 },
+            { years: 49, months: "0-2", factor: 1.900 },
+            { years: 49, months: "3-5", factor: 1.925 },
+            { years: 49, months: "6-8", factor: 1.950 },
+            { years: 49, months: "9-11", factor: 1.975 },
+            { years: 50, months: "0-2", factor: 2.000 },
+            { years: 50, months: "3-5", factor: 2.025 },
+            { years: 50, months: "6-8", factor: 2.050 },
+            { years: 50, months: "9-11", factor: 2.075 },
+            { years: 51, months: "0-2", factor: 2.100 },
+            { years: 51, months: "3-5", factor: 2.125 },
+            { years: 51, months: "6-8", factor: 2.150 },
+            { years: 51, months: "9-11", factor: 2.175 },
+            { years: 52, months: "0-2", factor: 2.200 },
+            { years: 52, months: "3-5", factor: 2.225 },
+            { years: 52, months: "6-8", factor: 2.250 },
+            { years: 52, months: "9-11", factor: 2.275 },
+            { years: 53, months: "0-2", factor: 2.300 },
+            { years: 53, months: "3-5", factor: 2.325 },
+            { years: 53, months: "6-8", factor: 2.350 },
+            { years: 53, months: "9-11", factor: 2.375 },
+            { years: 54, months: "0-2", factor: 2.400 },
+            { years: 54, months: "3-5", factor: 2.425 },
+            { years: 54, months: "6-8", factor: 2.450 },
+            { years: 54, months: "9-11", factor: 2.475 },
+            { years: 55, months: "0-2", factor: 2.500 },
+            { years: 55, months: "3-5", factor: 2.525 },
+            { years: 55, months: "6-8", factor: 2.550 },
+            { years: 55, months: "9-11", factor: 2.575 },
+            { years: 56, months: "0-2", factor: 2.600 },
+            { years: 56, months: "3-5", factor: 2.625 },
+            { years: 56, months: "6-8", factor: 2.650 },
+            { years: 56, months: "9-11", factor: 2.675 },
+            { years: 57, months: "0-2", factor: 2.700 },
+            { years: 57, months: "3-5", factor: 2.725 },
+            { years: 57, months: "6-8", factor: 2.750 },
+            { years: 57, months: "9-11", factor: 2.775 },
+            { years: 58, months: "0-2", factor: 2.800 },
+            { years: 58, months: "3-5", factor: 2.825 },
+            { years: 58, months: "6-8", factor: 2.850 },
+            { years: 58, months: "9-11", factor: 2.875 },
+            { years: 59, months: "0-2", factor: 2.900 },
+            { years: 59, months: "3-5", factor: 2.925 },
+            { years: 59, months: "6-8", factor: 2.950 },
+            { years: 59, months: "9-11", factor: 2.975 },
+            { years: 60, months: "0-2", factor: 3.000 },
+            { years: 60, months: "3-5", factor: 3.025 },
+            { years: 60, months: "6-8", factor: 3.050 },
+            { years: 60, months: "9-11", factor: 3.075 },
+            { years: 61, months: "0-2", factor: 3.100 },
+            { years: 61, months: "3-5", factor: 3.125 },
+            { years: 61, months: "6-8", factor: 3.150 },
+            { years: 61, months: "9-11", factor: 3.175 },
+            { years: 62, months: "0-2", factor: 3.200 },
+            { years: 62, months: "3-5", factor: 3.225 },
+            { years: 62, months: "6-8", factor: 3.250 },
+            { years: 62, months: "9-11", factor: 3.275 },
+            { years: 63, months: "0-2", factor: 3.300 },
+            { years: 63, months: "3-5", factor: 3.325 },
+            { years: 63, months: "6-8", factor: 3.350 },
+            { years: 63, months: "9-11", factor: 3.375 },
+            { years: 64, months: "0-2", factor: 3.400 },
+            { years: 64, months: "3-5", factor: 3.425 },
+            { years: 64, months: "6-8", factor: 3.450 },
+            { years: 64, months: "9-11", factor: 3.475 }
+        ];
+
+        // Helper function to match the month range
+        function getMonthRangeFactor(months, year) {
+            const monthRanges = ["0-2", "3-5", "6-8", "9-11"];
+            for (let range of monthRanges) {
+                if (range === months) {
+                    const entry = ageFactors.find(factor => factor.years === year && factor.months === range);
+                    return entry ? entry.factor : 1.0; // Default factor if not found
+                }
+            }
+            return 1.0;
+        }
+
+        // Function to retrieve the age adjustment factor from the table
+        function getAgeAdjustmentFactor(ageYears, ageMonths) {
+            // Match month range for better readability
+            let monthRange;
+            if (ageMonths <= 2) {
+                monthRange = "0-2";
+            } else if (ageMonths <= 5) {
+                monthRange = "3-5";
+            } else if (ageMonths <= 8) {
+                monthRange = "6-8";
+            } else {
+                monthRange = "9-11";
+            }
+
+            return getMonthRangeFactor(monthRange, ageYears);
+        }
+
+        function calculateSeverance() {
+            const annualPay = parseFloat(document.getElementById('annualPay').value);
+            const yearsOfService = parseFloat(document.getElementById('yearsOfService').value);
+            const ageYears = parseFloat(document.getElementById('ageYears').value);
+            const ageMonths = parseFloat(document.getElementById('ageMonths').value);
+
+            if (isNaN(annualPay) || isNaN(yearsOfService) || isNaN(ageYears) || isNaN(ageMonths)) {
+                alert("Please enter valid input in all fields.");
+                return;
+            }
+
+            const weeklyRate = annualPay / 52.175;
+            let adjustedYearsOfService = yearsOfService > 10 ? (yearsOfService - 10) * 2 + 10 : yearsOfService;
+            const basicSeverancePay = weeklyRate * adjustedYearsOfService;
+
+            // Age adjustment factor placeholder
+            const ageAdjustmentFactor = getAgeAdjustmentFactor(ageYears, ageMonths);
+
+            const adjustedSeverancePay = basicSeverancePay * ageAdjustmentFactor;
+            const maximumSeverancePay = weeklyRate * 52;
+            const totalSeveranceFund = Math.min(adjustedSeverancePay, maximumSeverancePay);
+            const biweeklySeverancePayment = weeklyRate * 2;
+            const weeksOfSeverancePayments = (totalSeveranceFund / biweeklySeverancePayment) * 2;
+
+            // Display standard results (biweekly severance and weeks of payments)
+            document.getElementById('standardResults').innerHTML = `
+                        <p><b>Biweekly Severance Payment:</b> $${biweeklySeverancePayment.toFixed(2)}</p>
+                        <p><b>Weeks of Severance Payments:</b> ${weeksOfSeverancePayments.toFixed(2)}</p>
+                      `;
+
+            // Set detailed results inside the hidden panel
+            document.getElementById('weeklyRate').innerText = `Weekly Rate: $${weeklyRate.toFixed(2).toLocaleString()}`;
+            document.getElementById('adjustedYears').innerText = `Adjusted Years of Service: ${adjustedYearsOfService}`;
+            document.getElementById('basicSeverance').innerText = `Basic Severance Pay: $${basicSeverancePay.toFixed(2)}`;
+            document.getElementById('ageAdjustmentFactor').innerText = `Age Adjustment Factor: ${ageAdjustmentFactor}`;
+            document.getElementById('adjustedSeverancePay').innerText = `Adjusted Severance Pay: $${adjustedSeverancePay.toFixed(2)}`;
+            document.getElementById('maximumSeverance').innerText = `Maximum Severance Pay: $${maximumSeverancePay.toFixed(2)}`;
+            document.getElementById('totalSeveranceFund').innerText = `Total Severance Fund: $${totalSeveranceFund.toFixed(2)}`;
+
+            document.getElementById('results').style.display = 'block';
+        }
+
+        // Toggle accordion
+        document.addEventListener('DOMContentLoaded', function () {
+            const accordionButton = document.querySelector('.accordion');
+            const panel = document.querySelector('.panel');
+
+            accordionButton.addEventListener('click', function () {
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            });
+        });
+    </script>
+</body>
+</html>
