@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Homework Helper</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; overflow: hidden; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f4f6f9;
+            color: #222;
+            display: flex;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 240px;
+            background: #2c3e50;
+            color: #ecf0f1;
+            height: 100vh;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-header {
+            padding: 24px 20px 20px;
+            border-bottom: 1px solid #3d5166;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            position: relative;
+            flex-shrink: 0;
+        }
+        .sidebar-header h1 {
+            font-size: 1.25rem;
+            flex: 1;
+            margin: 0;
+        }
+        .flyout-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: #bdc3c7;
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            line-height: 1;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s, color 0.15s;
+        }
+        .flyout-btn:hover, .flyout-btn.open {
+            background: #34495e;
+            color: #ecf0f1;
+        }
+        .flyout-menu {
+            display: none;
+            position: absolute;
+            top: calc(100% - 4px);
+            right: 16px;
+            min-width: 200px;
+            background: #34495e;
+            border: 1px solid #3d5166;
+            border-radius: 6px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+            padding: 6px;
+            z-index: 50;
+        }
+        .flyout-menu.open { display: block; }
+        .flyout-item {
+            display: flex;
+            width: 100%;
+            align-items: center;
+            justify-content: space-between;
+            background: transparent;
+            border: none;
+            color: #ecf0f1;
+            padding: 8px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-align: left;
+        }
+        .flyout-item:hover { background: #3d5166; }
+        .flyout-item .badge {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            background: #27ae60;
+            color: white;
+        }
+        .flyout-item .badge.off { background: #7f8c8d; }
+
+        .sidebar-section-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #95a5a6;
+            padding: 12px 20px 6px;
+            flex-shrink: 0;
+        }
+        .sidebar-helpers {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+            /* Hide the scrollbar track/thumb until hover. Keeps a 6px gutter
+               reserved so there is no layout shift when the thumb appears. */
+            scrollbar-width: thin;
+            scrollbar-color: transparent transparent;
+            transition: scrollbar-color 0.2s;
+        }
+        .sidebar-helpers:hover { scrollbar-color: #3d5166 transparent; }
+        .sidebar-helpers::-webkit-scrollbar { width: 6px; }
+        .sidebar-helpers::-webkit-scrollbar-track { background: transparent; }
+        .sidebar-helpers::-webkit-scrollbar-thumb {
+            background: transparent;
+            border-radius: 3px;
+            transition: background 0.2s;
+        }
+        .sidebar-helpers:hover::-webkit-scrollbar-thumb { background: #3d5166; }
+
+        .helper-list { list-style: none; }
+        .helper-list li {
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: background 0.15s;
+            border-left: 3px solid transparent;
+        }
+        .helper-list li:hover { background: #34495e; }
+        .helper-list li.active {
+            background: #34495e;
+            border-left-color: #3498db;
+        }
+
+        /* Main (three-zone layout: top bar, scroll area, bottom bar) */
+        .main {
+            flex: 1;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .main-top {
+            padding: 32px 40px 16px;
+            background: #f4f6f9;
+            flex-shrink: 0;
+            border-bottom: 1px solid #e0e4e8;
+        }
+        .main-scroll {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+            padding: 20px 40px;
+        }
+        .main-bottom {
+            flex-shrink: 0;
+            padding: 14px 40px;
+            background: white;
+            border-top: 1px solid #e0e4e8;
+            box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        .main h2 {
+            margin-bottom: 8px;
+            color: #2c3e50;
+        }
+        .subtitle {
+            color: #7f8c8d;
+            margin-bottom: 20px;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-block;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.15s, transform 0.05s;
+        }
+        .btn:active { transform: translateY(1px); }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-primary { background: #3498db; color: white; }
+        .btn-primary:hover { background: #2980b9; }
+        .btn-success { background: #27ae60; color: white; }
+        .btn-success:hover { background: #219a52; }
+        .btn-warning { background: #e67e22; color: white; }
+        .btn-warning:hover { background: #ca6a1a; }
+        .btn-ghost { background: #ecf0f1; color: #34495e; }
+        .btn-ghost:hover { background: #dde4e6; }
+        .btn-danger-ghost {
+            background: transparent;
+            color: #c0392b;
+            padding: 4px 8px;
+            font-size: 0.85rem;
+        }
+        .btn-danger-ghost:hover { background: #fadbd8; }
+
+        .button-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+
+        .options-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            background: white;
+            border-radius: 6px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+            font-size: 0.9rem;
+        }
+        .options-row label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .options-row input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        .options-row .option-hint {
+            color: #7f8c8d;
+            font-size: 0.85rem;
+        }
+
+        /* Empty state */
+        .empty-state {
+            background: white;
+            border: 2px dashed #bdc3c7;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            color: #7f8c8d;
+            margin-top: 16px;
+        }
+
+        /* Test */
+        .score-banner {
+            background: white;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .score-banner .score-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        .score-banner.graded .score-value { color: #27ae60; }
+        .score-banner .score-percent {
+            font-size: 1rem;
+            font-weight: 500;
+            color: #7f8c8d;
+            margin-left: 4px;
+        }
+        .score-banner.graded .score-percent { color: #27ae60; }
+
+        .question {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 14px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .question-header {
+            font-weight: 600;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+        }
+        .choices { display: flex; flex-direction: column; gap: 8px; }
+        .choice {
+            display: flex;
+            align-items: center;
+            padding: 10px 12px;
+            border: 2px solid #ecf0f1;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.12s, border-color 0.12s;
+        }
+        .choice:hover { background: #f8f9fa; }
+        .choice input { margin-right: 10px; cursor: pointer; }
+        .choice.selected {
+            border-color: #3498db;
+            background: #ebf5fb;
+        }
+        .choice .mark {
+            margin-left: auto;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .choice.correct {
+            border-color: #27ae60;
+            background: #eafaf1;
+        }
+        .choice.correct .mark { color: #27ae60; }
+        .choice.incorrect {
+            border-color: #c0392b;
+            background: #fdedec;
+        }
+        .choice.incorrect .mark { color: #c0392b; }
+        .graded .choice { cursor: default; }
+        .graded .choice:hover { background: inherit; }
+
+        /* Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal {
+            background: white;
+            border-radius: 10px;
+            padding: 24px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal h3 {
+            margin-bottom: 6px;
+            color: #2c3e50;
+        }
+        .modal .hint {
+            color: #7f8c8d;
+            font-size: 0.9rem;
+            margin-bottom: 16px;
+        }
+        .modal textarea {
+            width: 100%;
+            min-height: 140px;
+            padding: 10px;
+            border: 1px solid #bdc3c7;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            resize: vertical;
+        }
+        .modal textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        .existing-words {
+            max-height: 160px;
+            overflow-y: auto;
+            margin-bottom: 16px;
+            border: 1px solid #ecf0f1;
+            border-radius: 6px;
+        }
+        .existing-words-empty {
+            padding: 12px;
+            color: #95a5a6;
+            font-style: italic;
+            text-align: center;
+        }
+        .existing-word {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 12px;
+            border-bottom: 1px solid #f4f6f9;
+        }
+        .existing-word:last-child { border-bottom: none; }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        /* PIN modal fields */
+        .pin-field { margin-bottom: 12px; }
+        .pin-field label {
+            display: block;
+            font-size: 0.85rem;
+            color: #34495e;
+            margin-bottom: 4px;
+        }
+        .pin-field input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #bdc3c7;
+            border-radius: 6px;
+            font-family: inherit;
+            font-size: 1.1rem;
+            letter-spacing: 0.15em;
+        }
+        .pin-field input:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        .pin-error {
+            color: #c0392b;
+            font-size: 0.9rem;
+            min-height: 1.2em;
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <h1>Homework Helper</h1>
+            <button class="flyout-btn" id="flyout-btn" aria-label="Menu" aria-haspopup="true" aria-expanded="false">&#8942;</button>
+            <div class="flyout-menu" id="flyout-menu" role="menu">
+                <button class="flyout-item" id="guardian-pin-btn" role="menuitem">
+                    <span>Guardian PIN</span>
+                    <span class="badge off" id="pin-status-badge">off</span>
+                </button>
+            </div>
+        </div>
+        <div class="sidebar-section-label">Helpers</div>
+        <div class="sidebar-helpers">
+            <ul class="helper-list">
+                <li class="active" data-helper="spelling">Spelling Test</li>
+            </ul>
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="main-top">
+            <h2>Spelling Test</h2>
+            <p class="subtitle">Add your spelling words, then take a multiple-choice quiz.</p>
+
+            <div class="button-row">
+                <button class="btn btn-primary" id="add-words-btn">Add Words</button>
+                <button class="btn btn-warning" id="reset-btn" style="display:none;">Reset &amp; Randomize</button>
+            </div>
+
+            <div class="options-row">
+                <label>
+                    <input type="checkbox" id="filter-words-toggle" checked>
+                    <span>Only show misspellings (no real-word distractors)</span>
+                </label>
+                <span class="option-hint">&mdash; turn off for teacher-read quizzes</span>
+            </div>
+        </div>
+
+        <div class="main-scroll">
+            <div id="test-container"></div>
+        </div>
+
+        <div class="main-bottom" id="main-bottom" style="display:none;">
+            <button class="btn btn-success" id="check-btn">Check Answers</button>
+        </div>
+    </main>
+
+    <script src="wordlist.js"></script>
+
+    <div class="modal-overlay" id="modal">
+        <div class="modal">
+            <h3>Manage Words</h3>
+            <p class="hint">Enter one word per line, then click Add.</p>
+
+            <div class="existing-words" id="existing-words"></div>
+
+            <textarea id="words-input" placeholder="e.g.&#10;receive&#10;necessary&#10;accommodate"></textarea>
+
+            <div class="modal-actions">
+                <button class="btn btn-ghost" id="modal-cancel">Close</button>
+                <button class="btn btn-primary" id="modal-add">Add</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="pin-modal">
+        <div class="modal">
+            <h3 id="pin-modal-title">Guardian PIN</h3>
+            <p class="hint" id="pin-modal-hint"></p>
+
+            <div class="pin-field" id="pin-current-field">
+                <label for="pin-current">Current PIN</label>
+                <input type="password" id="pin-current" inputmode="numeric" autocomplete="off">
+            </div>
+
+            <div class="pin-field" id="pin-new-field">
+                <label for="pin-new">New PIN</label>
+                <input type="password" id="pin-new" inputmode="numeric" autocomplete="off">
+            </div>
+
+            <div class="pin-field" id="pin-confirm-field">
+                <label for="pin-confirm">Confirm new PIN</label>
+                <input type="password" id="pin-confirm" inputmode="numeric" autocomplete="off">
+            </div>
+
+            <div class="pin-error" id="pin-error"></div>
+
+            <div class="modal-actions">
+                <button class="btn btn-ghost" id="pin-cancel">Cancel</button>
+                <button class="btn btn-ghost" id="pin-remove" style="display:none;">Remove PIN</button>
+                <button class="btn btn-primary" id="pin-submit">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'homework-helper-spelling-words';
+        const FILTER_STORAGE_KEY = 'homework-helper-filter-real-words';
+        const PIN_STORAGE_KEY = 'homework-helper-guardian-pin-hash';
+        // Static salt so a common PIN like "1234" doesn't hash to a value
+        // findable in a public rainbow table. Easy to bypass for a skilled
+        // user; that's fine — the goal is just to slow down a curious kid.
+        const PIN_SALT = 'hh-guardian::';
+
+        const state = {
+            words: [],
+            test: [],      // [{ word, choices: [str], selected: null|idx }]
+            graded: false,
+            filterRealWords: true, // when false, real English words may be used as distractors
+        };
+
+        // ---------- Storage ----------
+        function loadWords() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                state.words = raw ? JSON.parse(raw) : [];
+            } catch (e) {
+                state.words = [];
+            }
+            // Default to true if never set.
+            const filter = localStorage.getItem(FILTER_STORAGE_KEY);
+            state.filterRealWords = filter === null ? true : filter === 'true';
+        }
+
+        function saveWords() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state.words));
+        }
+
+        function saveFilterPref() {
+            localStorage.setItem(FILTER_STORAGE_KEY, String(state.filterRealWords));
+        }
+
+        // ---------- Misspelling generation ----------
+        // Goal: generate misspellings a real student would plausibly make.
+        // Strategy: score each candidate by how "human" the error is, then pull
+        // from the top slice (with randomness) so the same word can produce
+        // different distractors across resets.
+        //
+        // Score tiers (rough):
+        //   10: morphological suffix traps (-ance/-ence, -able/-ible, tion/sion)
+        //    9: classic phonetic traps (ie/ei, ph/f, silent-e drop, soft-c/s)
+        //    8: schwa-vowel confusion (a/e swap mid-word, drop unstressed vowel)
+        //    7: doubled-consonant errors (add or drop one half of a double)
+        //    6: other vowel swaps (i/e, o/u)
+        //    5: hard-c/k, y/i at end
+        //    3: keyboard-adjacent typo (fallback, capped at one per word)
+
+        const VOWELS = 'aeiouy';
+        const HARD_VOWELS = 'aeiou';
+
+        // QWERTY adjacency for the last-resort typo fallback.
+        const KEY_ADJ = {
+            a:'qwsz', b:'vghn', c:'xdfv', d:'serfcx', e:'wsdr', f:'drtgvc',
+            g:'ftyhbv', h:'gyujnb', i:'ujko', j:'huikmn', k:'jiolm', l:'kop',
+            m:'njk', n:'bhjm', o:'iklp', p:'ol', q:'wa', r:'edft', s:'awedxz',
+            t:'rfgy', u:'yhji', v:'cfgb', w:'qase', x:'zsdc', y:'tghu', z:'asx'
+        };
+
+        function replaceChar(w, i, sub) { return w.slice(0, i) + sub + w.slice(i + 1); }
+        function replaceRange(w, i, len, sub) { return w.slice(0, i) + sub + w.slice(i + len); }
+        function dropChar(w, i) { return w.slice(0, i) + w.slice(i + 1); }
+        function doubleChar(w, i) { return w.slice(0, i + 1) + w[i] + w.slice(i + 1); }
+        function transposeAdjacent(w, i) { return w.slice(0, i) + w[i + 1] + w[i] + w.slice(i + 2); }
+
+        function isConsonant(c) { return c && !VOWELS.includes(c); }
+        function isVowel(c) { return c && HARD_VOWELS.includes(c); }
+
+        // Suffix pairs that students routinely confuse. Applied only when the
+        // word actually ends in one member (keeps the misspelling one edit away).
+        const SUFFIX_SWAPS = [
+            ['ance', 'ence'], ['ence', 'ance'],
+            ['ancy', 'ency'], ['ency', 'ancy'],
+            ['ant',  'ent'],  ['ent',  'ant'],
+            ['able', 'ible'], ['ible', 'able'],
+            ['tion', 'sion'], ['sion', 'tion'],
+            ['cious','tious'],['tious','cious'],
+            ['ary',  'ery'],  ['ery',  'ary'],
+            ['or',   'er'],   ['er',   'or'],
+        ];
+
+        // Digraph / phonetic substitutions — how kids actually misspell when
+        // writing by ear. Each is [pattern, replacement, score] and is applied
+        // to every occurrence in the word.
+        // Higher score = more iconic ("everyone does this") kid mistake.
+        const PHONETIC_SWAPS = [
+            // Iconic phonetic simplifications — kid spells what they hear:
+            ['oo',  'u',    8],   // food->fud, good->gud, spoon->spun
+            ['ou',  'u',    8],   // rough->ruf, enough->enuf, tough->tuf
+            ['igh', 'i',    8],   // night->nit, right->rit, fight->fit
+            ['wr',  'r',    8],   // wrong->rong, wrestle->restle
+            ['kn',  'n',    8],   // knight->night, knee->nee
+            ['dge', 'j',    8],   // judge->juj, bridge->brij
+            ['tch', 'ch',   8],   // watch->wach, catch->cach
+            // Vowel digraph confusion:
+            ['ee',  'e',    7],   // feet->fet, sleep->slep
+            ['ea',  'e',    7],   // beach->bech, reach->rech
+            ['ea',  'ee',   7],   // beat->beet (filtered if word), peach->peech
+            ['ai',  'a',    7],   // train->tran, rain->ran
+            ['ai',  'ay',   7],   // rain->rayn, pain->payn
+            ['ay',  'a',    7],   // play->pla, day->da
+            ['ay',  'ai',   7],   // day->dai, way->wai
+            ['oa',  'o',    7],   // boat->bot, coat->cot
+            ['oa',  'ow',   7],   // boat->bowt, road->rowd
+            ['ow',  'ou',   7],   // cow->cou, town->toun
+            ['ou',  'ow',   7],   // house->howse, mouse->mowse
+            // R-controlled vowels (notorious for kids, all sound like /ər/):
+            ['er',  'ur',   7],   // her->hur, father->fathur
+            ['ur',  'er',   7],   // turn->tern, burn->bern
+            ['ir',  'ur',   7],   // bird->burd, first->furst
+            ['ir',  'er',   7],   // girl->gerl, third->therd
+            // Consonant simplifications:
+            ['ck',  'k',    7],   // back->bak, duck->duk, chicken->chiken
+            ['ing', 'in',   7],   // running->runnin, walking->walkin
+            // Lower-score / less reliable variants (still plausible):
+            ['u',   'oo',   6],   // put->poot, push->poosh
+            ['ee',  'ea',   6],   // need->nead, seem->seam (often a word)
+        ];
+
+        function generateMisspellings(word, count, extraExclude, filterRealWords) {
+            const lower = word.toLowerCase();
+            const scored = new Map(); // text -> best score
+            const dict = filterRealWords ? window.HOMEWORK_HELPER_DICTIONARY : null;
+            const exclude = extraExclude || new Set();
+
+            // A candidate is "valid" as a distractor only if it is NOT itself a
+            // real English word — otherwise the student has two plausible
+            // spellings to pick between and can't tell which is the test word.
+            // (The dictionary check is skipped when filterRealWords is off, e.g.
+            // for teacher-read quizzes where the target is spoken aloud.)
+            // The target word and any other word on the same test are always
+            // excluded — those are confusing regardless of mode.
+            // We also require the candidate to contain at least one vowel so we
+            // never emit unpronounceable strings like "bkg".
+            function add(text, score) {
+                if (!text || text === lower) return;
+                if (!/^[a-z'-]+$/.test(text)) return;
+                if (!/[aeiouy]/.test(text)) return;
+                if (exclude.has(text)) return;
+                if (dict && dict.has(text)) return;
+                const prev = scored.get(text);
+                if (prev === undefined || score > prev) scored.set(text, score);
+            }
+
+            // --- Tier 10: suffix traps ---
+            for (const [from, to] of SUFFIX_SWAPS) {
+                if (lower.endsWith(from) && lower.length > from.length + 1) {
+                    add(lower.slice(0, -from.length) + to, 10);
+                }
+            }
+
+            // --- Phonetic / digraph swaps (kid-by-ear spellings) ---
+            // Scores vary per entry; see PHONETIC_SWAPS. Apply to every
+            // occurrence of each pattern in the word.
+            for (const [from, to, score] of PHONETIC_SWAPS) {
+                let idx = lower.indexOf(from);
+                while (idx !== -1) {
+                    const candidate = lower.slice(0, idx) + to + lower.slice(idx + from.length);
+                    add(candidate, score);
+                    idx = lower.indexOf(from, idx + 1);
+                }
+            }
+
+            // --- Tier 9: classic phonetic traps ---
+            // ie <-> ei (receive/recieve, believe/beleive)
+            for (let i = 0; i < lower.length - 1; i++) {
+                if (lower[i] === 'i' && lower[i + 1] === 'e') add(replaceRange(lower, i, 2, 'ei'), 9);
+                if (lower[i] === 'e' && lower[i + 1] === 'i') add(replaceRange(lower, i, 2, 'ie'), 9);
+            }
+            // ph -> f (and f -> ph after a vowel)
+            if (lower.includes('ph')) add(lower.replace('ph', 'f'), 9);
+            for (let i = 1; i < lower.length; i++) {
+                if (lower[i] === 'f' && isVowel(lower[i - 1]) && lower[i - 1] !== lower[i + 1]) {
+                    add(replaceChar(lower, i, 'ph'), 7);
+                }
+            }
+            // Silent trailing e drop (but only when the preceding letter isn't a vowel,
+            // so "see" doesn't become "se").
+            if (lower.length > 3 && lower.endsWith('e') && isConsonant(lower[lower.length - 2])) {
+                add(lower.slice(0, -1), 9);
+            }
+            // Soft c <-> s (before e/i/y)
+            for (let i = 0; i < lower.length; i++) {
+                const nxt = lower[i + 1];
+                if (lower[i] === 'c' && 'eiy'.includes(nxt || '')) add(replaceChar(lower, i, 's'), 9);
+                if (lower[i] === 's' && 'eiy'.includes(nxt || '') && i > 0) add(replaceChar(lower, i, 'c'), 7);
+            }
+
+            // --- Tier 8: schwa-vowel confusion ---
+            // Unstressed vowels (flanked by consonants) sound like schwa and get
+            // respelled as a, e, or i. Covers separate->seperate, independent->
+            // independant, definite->definate, grammar->grammer, etc.
+            for (let i = 1; i < lower.length - 1; i++) {
+                if (!isVowel(lower[i])) continue;
+                if (!isConsonant(lower[i - 1]) || !isConsonant(lower[i + 1])) continue;
+                for (const sub of 'aei') {
+                    if (sub !== lower[i]) add(replaceChar(lower, i, sub), 8);
+                }
+            }
+            // Drop an unstressed interior vowel flanked by consonants (chocolate->choclate,
+            // different->diffrent, family->famly). Require a vowel earlier in the word
+            // so we never drop the first vowel (which would produce nonsense like "dfferent").
+            for (let i = 2; i < lower.length - 1; i++) {
+                if (isVowel(lower[i]) && isConsonant(lower[i - 1]) && isConsonant(lower[i + 1])) {
+                    const hasEarlierVowel = [...lower.slice(0, i)].some(isVowel);
+                    if (hasEarlierVowel) add(dropChar(lower, i), 8);
+                }
+            }
+            // Drop silent h in rh-/gh-/wh- style clusters (rhythm->rythm, ghost->gost).
+            for (let i = 1; i < lower.length; i++) {
+                if (lower[i] === 'h' && 'rgw'.includes(lower[i - 1])) {
+                    add(dropChar(lower, i), 8);
+                }
+            }
+            // Silent b at end of -mb (lamb->lam, thumb->thum, comb->com, climb->clim).
+            if (lower.length > 3 && lower.endsWith('mb')) {
+                add(lower.slice(0, -1), 8);
+            }
+            // Silent l in -lk and -lm, anywhere in the word (walk->wak, talk->tak,
+            // chalk->chak, calm->cam, palm->pam).
+            for (let i = 0; i < lower.length - 1; i++) {
+                if (lower[i] === 'l' && (lower[i + 1] === 'k' || lower[i + 1] === 'm')) {
+                    add(dropChar(lower, i), 8);
+                }
+            }
+            // Silent g in gn at word start or word end only — gn is pronounced
+            // mid-word (e.g. "magnet"), so we don't fire there.
+            // Covers: gnome->nome, gnat->nat, sign->sin, design->desin,
+            // foreign->forein, reign->rein, assign->asin, align->alin.
+            for (let i = 0; i < lower.length - 1; i++) {
+                if (lower[i] === 'g' && lower[i + 1] === 'n' &&
+                    (i === 0 || i + 2 === lower.length)) {
+                    add(dropChar(lower, i), 7);
+                }
+            }
+            // Silent n in final -mn (autumn->autum, column->colum, hymn->hym,
+            // solemn->solem, condemn->condem).
+            if (lower.length > 3 && lower.endsWith('mn')) {
+                add(lower.slice(0, -1), 7);
+            }
+            // Silent b in -bt- (doubt->dout, debt->det, subtle->sutle).
+            for (let i = 1; i < lower.length - 1; i++) {
+                if (lower[i] === 'b' && lower[i + 1] === 't') {
+                    add(dropChar(lower, i), 7);
+                }
+            }
+            // Silent t in stle/sten/ften clusters (castle->casle, whistle->whisle,
+            // listen->lisen, fasten->fasen, often->ofen, soften->sofen).
+            for (const cluster of ['stle', 'sten', 'ften']) {
+                const idx = lower.indexOf(cluster);
+                if (idx !== -1) add(dropChar(lower, idx + 1), 7);
+            }
+
+            // --- Tier 8: double-consonant errors (as common as schwa confusion) ---
+            // Drop one of a doubled consonant (necessary->necesary, accommodate->acommodate).
+            for (let i = 0; i < lower.length - 1; i++) {
+                if (lower[i] === lower[i + 1] && isConsonant(lower[i])) {
+                    add(dropChar(lower, i), 8);
+                }
+            }
+            // Double a lone intervocalic consonant (occur->occurr, travel->travell,
+            // necessary->neccessary).
+            for (let i = 1; i < lower.length - 1; i++) {
+                const c = lower[i];
+                if (isConsonant(c) && isVowel(lower[i - 1]) && isVowel(lower[i + 1]) &&
+                    lower[i - 1] !== lower[i + 1] && c !== 'w' && c !== 'h') {
+                    add(doubleChar(lower, i), 8);
+                }
+            }
+            // Double the final consonant (fat->fatt, big->bigg, dog->dogg).
+            // Very common kid-level misspelling, and crucial for short words
+            // where most other transforms either produce real words or fail.
+            const last = lower.length - 1;
+            if (last >= 1 && isConsonant(lower[last]) && lower[last] !== lower[last - 1] &&
+                lower[last] !== 'h' && lower[last] !== 'w' && lower[last] !== 'y') {
+                add(lower + lower[last], 7);
+            }
+
+            // --- Tier 6: other vowel swaps ---
+            for (let i = 1; i < lower.length - 1; i++) {
+                if (lower[i] === 'i' && isConsonant(lower[i - 1])) add(replaceChar(lower, i, 'e'), 6);
+                if (lower[i] === 'e' && isConsonant(lower[i - 1]) && i < lower.length - 2) add(replaceChar(lower, i, 'i'), 6);
+                if (lower[i] === 'o') add(replaceChar(lower, i, 'u'), 6);
+                if (lower[i] === 'u') add(replaceChar(lower, i, 'o'), 6);
+            }
+
+            // --- Tier 5: hard-c/k, y/ie at end, transpositions ---
+            for (let i = 0; i < lower.length; i++) {
+                const nxt = lower[i + 1] || '';
+                if (lower[i] === 'c' && !'eiy'.includes(nxt)) add(replaceChar(lower, i, 'k'), 5);
+                if (lower[i] === 'k') add(replaceChar(lower, i, 'c'), 4);
+            }
+            if (lower.endsWith('y') && lower.length > 3 && isConsonant(lower[lower.length - 2])) {
+                add(lower.slice(0, -1) + 'ie', 5);
+                add(lower.slice(0, -1) + 'ey', 5);
+            }
+            // Adjacent transpositions beyond ie/ei (covers keyboard-order confusion
+            // and things like "wierd"-style swaps we didn't catch above).
+            for (let i = 1; i < lower.length - 2; i++) {
+                if (lower[i] !== lower[i + 1]) add(transposeAdjacent(lower, i), 5);
+            }
+
+            // --- Tier 3: keyboard-adjacent typo (capped fallback) ---
+            // Only contribute a couple of these and only if we truly need them.
+            const keyboardCandidates = [];
+            for (let i = 0; i < lower.length; i++) {
+                const adj = KEY_ADJ[lower[i]];
+                if (!adj) continue;
+                for (const k of adj) {
+                    keyboardCandidates.push(replaceChar(lower, i, k));
+                }
+            }
+            shuffle(keyboardCandidates);
+            for (const c of keyboardCandidates.slice(0, 2)) add(c, 3);
+
+            // --- Select `count` candidates, biased toward high-scoring ones ---
+            // Group by score tier (highest first) and shuffle within a tier so
+            // the same word can yield different distractors on reset.
+            const byScore = new Map();
+            for (const [text, score] of scored.entries()) {
+                if (!byScore.has(score)) byScore.set(score, []);
+                byScore.get(score).push(text);
+            }
+            const tiers = [...byScore.keys()].sort((a, b) => b - a);
+
+            const picks = [];
+            for (const score of tiers) {
+                const bucket = byScore.get(score);
+                shuffle(bucket);
+                for (const text of bucket) {
+                    if (picks.length >= count) break;
+                    picks.push(text);
+                }
+                if (picks.length >= count) break;
+            }
+
+            // Safety net: short, common words ("dog", "run") often lose most
+            // candidates to the dictionary filter. Generate pronounceable
+            // fallbacks by doubling letters or appending a vowel / silent-e
+            // style ending. These always look like plausible student errors,
+            // unlike a random trailing consonant.
+            function tryAdd(candidate) {
+                if (!candidate || candidate === lower) return;
+                if (!/[aeiouy]/.test(candidate)) return;
+                if (exclude.has(candidate)) return;
+                if (dict && dict.has(candidate)) return;
+                if (picks.includes(candidate)) return;
+                picks.push(candidate);
+            }
+
+            const fallbacks = [];
+            // Double any single letter (cat -> caat/catt/ccat)
+            for (let i = 0; i < lower.length; i++) {
+                if (lower[i] !== lower[i - 1] && lower[i] !== lower[i + 1]) {
+                    fallbacks.push(doubleChar(lower, i));
+                }
+            }
+            // Append a vowel (fat -> fata, big -> bigo)
+            for (const v of 'aeio') fallbacks.push(lower + v);
+            // Append a final 'e' or 'ie' / 'ey' for a "thought it was a word" error
+            fallbacks.push(lower + 'e');
+            if (!lower.endsWith('e')) fallbacks.push(lower + 'ie');
+            if (lower.endsWith('y')) fallbacks.push(lower.slice(0, -1) + 'ie');
+            // Insert an extra vowel mid-word (fat -> faet, big -> biag)
+            for (let i = 1; i < lower.length; i++) {
+                for (const v of 'aei') {
+                    if (lower[i - 1] !== v && lower[i] !== v) {
+                        fallbacks.push(lower.slice(0, i) + v + lower.slice(i));
+                    }
+                }
+            }
+            shuffle(fallbacks);
+            for (const cand of fallbacks) {
+                if (picks.length >= count) break;
+                tryAdd(cand);
+            }
+            return picks.slice(0, count);
+        }
+
+        // ---------- Utilities ----------
+        function shuffle(arr) {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        // ---------- Test building ----------
+        function buildTest() {
+            const words = [...state.words];
+            shuffle(words);
+            // Exclude all other test words from each question's distractors so
+            // a misspelling of one word can't happen to match another target.
+            const allTargets = new Set(words.map(w => w.toLowerCase()));
+            state.test = words.map(word => {
+                const lower = word.toLowerCase();
+                const exclude = new Set(allTargets);
+                exclude.delete(lower);
+                const misspellings = generateMisspellings(word, 3, exclude, state.filterRealWords);
+                const choices = shuffle([lower, ...misspellings]);
+                return { word: lower, choices, selected: null };
+            });
+            state.graded = false;
+        }
+
+        // ---------- Rendering ----------
+        function render() {
+            const container = document.getElementById('test-container');
+            const checkBtn = document.getElementById('check-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const bottomBar = document.getElementById('main-bottom');
+
+            if (state.words.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        No words yet. Click <strong>Add Words</strong> to get started.
+                    </div>`;
+                bottomBar.style.display = 'none';
+                resetBtn.style.display = 'none';
+                return;
+            }
+
+            bottomBar.style.display = 'flex';
+            resetBtn.style.display = 'inline-block';
+
+            const allAnswered = state.test.every(q => q.selected !== null);
+            checkBtn.disabled = !allAnswered || state.graded;
+            checkBtn.title = allAnswered ? '' : 'Answer every question first';
+
+            let correctCount = 0;
+            if (state.graded) {
+                correctCount = state.test.reduce((n, q) =>
+                    n + (q.selected !== null && q.choices[q.selected] === q.word ? 1 : 0), 0);
+            }
+
+            const percent = state.test.length
+                ? Math.round((correctCount / state.test.length) * 100)
+                : 0;
+            const scoreHtml = state.graded
+                ? `<div class="score-banner graded">
+                       <span>Score</span>
+                       <span class="score-value">${correctCount} / ${state.test.length} <span class="score-percent">(${percent}%)</span></span>
+                   </div>`
+                : `<div class="score-banner">
+                       <span>Ready to take the test</span>
+                       <span class="score-value">${state.test.length} word${state.test.length === 1 ? '' : 's'}</span>
+                   </div>`;
+
+            const questionsHtml = state.test.map((q, qIdx) => {
+                const choicesHtml = q.choices.map((choice, cIdx) => {
+                    const isSelected = q.selected === cIdx;
+                    const isCorrect = choice === q.word;
+                    let cls = 'choice';
+                    let mark = '';
+                    if (state.graded) {
+                        if (isCorrect) {
+                            cls += ' correct';
+                            mark = '<span class="mark">&#10003;</span>';
+                        } else if (isSelected) {
+                            cls += ' incorrect';
+                            mark = '<span class="mark">&#10007;</span>';
+                        }
+                    } else if (isSelected) {
+                        cls += ' selected';
+                    }
+                    return `
+                        <label class="${cls}">
+                            <input type="radio" name="q${qIdx}" value="${cIdx}" ${isSelected ? 'checked' : ''} ${state.graded ? 'disabled' : ''}>
+                            <span>${escapeHtml(choice)}</span>
+                            ${mark}
+                        </label>`;
+                }).join('');
+
+                return `
+                    <div class="question ${state.graded ? 'graded' : ''}">
+                        <div class="question-header">Question ${qIdx + 1}</div>
+                        <div class="choices">${choicesHtml}</div>
+                    </div>`;
+            }).join('');
+
+            container.innerHTML = scoreHtml + questionsHtml;
+
+            // Wire up choice clicks
+            container.querySelectorAll('input[type="radio"]').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    if (state.graded) return;
+                    const [, qIdx] = e.target.name.match(/^q(\d+)$/);
+                    state.test[parseInt(qIdx)].selected = parseInt(e.target.value);
+                    render();
+                });
+            });
+        }
+
+        function escapeHtml(s) {
+            return s.replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        // ---------- Modal ----------
+        function renderExistingWords() {
+            const container = document.getElementById('existing-words');
+            if (state.words.length === 0) {
+                container.innerHTML = `<div class="existing-words-empty">No words added yet.</div>`;
+                return;
+            }
+            container.innerHTML = state.words.map((w, i) => `
+                <div class="existing-word">
+                    <span>${escapeHtml(w)}</span>
+                    <button class="btn-danger-ghost" data-idx="${i}">Remove</button>
+                </div>`).join('');
+
+            container.querySelectorAll('button[data-idx]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.idx);
+                    state.words.splice(idx, 1);
+                    saveWords();
+                    renderExistingWords();
+                });
+            });
+        }
+
+        function openModal() {
+            renderExistingWords();
+            document.getElementById('words-input').value = '';
+            document.getElementById('modal').classList.add('open');
+            document.getElementById('words-input').focus();
+        }
+
+        function closeModal() {
+            document.getElementById('modal').classList.remove('open');
+            // If the word list changed (add/remove), rebuild the test.
+            buildTest();
+            render();
+        }
+
+        function addWordsFromInput() {
+            const input = document.getElementById('words-input');
+            const raw = input.value;
+            const newWords = raw
+                .split(/[\n,]/)
+                .map(w => w.trim().toLowerCase())
+                .filter(w => w.length > 0 && /^[a-z'-]+$/.test(w));
+
+            for (const w of newWords) {
+                if (!state.words.includes(w)) state.words.push(w);
+            }
+            saveWords();
+            input.value = '';
+            renderExistingWords();
+        }
+
+        // ---------- Guardian PIN ----------
+        // A one-way SHA-256 hash of (salt + pin) is stored in localStorage.
+        // This is not cryptographically serious security — anyone with devtools
+        // can clear the storage key. It's just enough friction to stop a kid
+        // from clicking Add Words and seeing the answer list.
+
+        async function sha256Hex(text) {
+            const buf = new TextEncoder().encode(text);
+            const hash = await crypto.subtle.digest('SHA-256', buf);
+            return [...new Uint8Array(hash)]
+                .map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        async function hashPin(pin) { return sha256Hex(PIN_SALT + pin); }
+        function getStoredPinHash() { return localStorage.getItem(PIN_STORAGE_KEY); }
+        function setStoredPinHash(hash) {
+            if (hash) localStorage.setItem(PIN_STORAGE_KEY, hash);
+            else localStorage.removeItem(PIN_STORAGE_KEY);
+        }
+
+        function updatePinStatusBadge() {
+            const badge = document.getElementById('pin-status-badge');
+            if (getStoredPinHash()) {
+                badge.textContent = 'on';
+                badge.classList.remove('off');
+            } else {
+                badge.textContent = 'off';
+                badge.classList.add('off');
+            }
+        }
+
+        // Reusable PIN modal. Mode controls which fields/text show up:
+        //   'auth'   — one field: current PIN (used before protected actions)
+        //   'set'    — two fields: new PIN + confirm (no existing PIN yet)
+        //   'change' — three fields: current + new + confirm
+        let pinModalOnSuccess = null;
+        let pinModalMode = 'auth';
+
+        function configurePinModal(mode) {
+            pinModalMode = mode;
+            const title = document.getElementById('pin-modal-title');
+            const hint = document.getElementById('pin-modal-hint');
+            const curField = document.getElementById('pin-current-field');
+            const newField = document.getElementById('pin-new-field');
+            const confirmField = document.getElementById('pin-confirm-field');
+            const removeBtn = document.getElementById('pin-remove');
+
+            document.getElementById('pin-current').value = '';
+            document.getElementById('pin-new').value = '';
+            document.getElementById('pin-confirm').value = '';
+            document.getElementById('pin-error').textContent = '';
+
+            if (mode === 'auth') {
+                title.textContent = 'Enter Guardian PIN';
+                hint.textContent = 'This action is protected. Enter the PIN to continue.';
+                curField.style.display = '';
+                newField.style.display = 'none';
+                confirmField.style.display = 'none';
+                removeBtn.style.display = 'none';
+            } else if (mode === 'set') {
+                title.textContent = 'Set Guardian PIN';
+                hint.textContent = 'Choose a PIN (4+ characters). You will need it to add or change words.';
+                curField.style.display = 'none';
+                newField.style.display = '';
+                confirmField.style.display = '';
+                removeBtn.style.display = 'none';
+            } else if (mode === 'change') {
+                title.textContent = 'Change Guardian PIN';
+                hint.textContent = 'Enter the current PIN, then choose a new one.';
+                curField.style.display = '';
+                newField.style.display = '';
+                confirmField.style.display = '';
+                removeBtn.style.display = '';
+            }
+        }
+
+        function openPinModal(mode, onSuccess) {
+            pinModalOnSuccess = onSuccess || null;
+            configurePinModal(mode);
+            document.getElementById('pin-modal').classList.add('open');
+            const firstVisible = mode === 'set'
+                ? document.getElementById('pin-new')
+                : document.getElementById('pin-current');
+            setTimeout(() => firstVisible.focus(), 0);
+        }
+
+        function closePinModal() {
+            document.getElementById('pin-modal').classList.remove('open');
+            pinModalOnSuccess = null;
+        }
+
+        async function submitPinModal() {
+            const errEl = document.getElementById('pin-error');
+            errEl.textContent = '';
+            const cur = document.getElementById('pin-current').value;
+            const fresh = document.getElementById('pin-new').value;
+            const confirm = document.getElementById('pin-confirm').value;
+
+            if (pinModalMode === 'auth' || pinModalMode === 'change') {
+                const storedHash = getStoredPinHash();
+                if (!storedHash) { errEl.textContent = 'No PIN set.'; return; }
+                const curHash = await hashPin(cur);
+                if (curHash !== storedHash) {
+                    errEl.textContent = 'Incorrect PIN.';
+                    return;
+                }
+            }
+
+            if (pinModalMode === 'set' || pinModalMode === 'change') {
+                if (fresh.length < 4) {
+                    errEl.textContent = 'New PIN must be at least 4 characters.';
+                    return;
+                }
+                if (fresh !== confirm) {
+                    errEl.textContent = 'New PIN and confirmation do not match.';
+                    return;
+                }
+                setStoredPinHash(await hashPin(fresh));
+                updatePinStatusBadge();
+            }
+
+            const cb = pinModalOnSuccess;
+            closePinModal();
+            if (cb) cb();
+        }
+
+        // Route the Add Words click through the PIN gate only if a PIN has
+        // been set. Before a guardian configures one, the button works as
+        // normal.
+        function handleAddWordsClick() {
+            if (getStoredPinHash()) {
+                openPinModal('auth', openModal);
+            } else {
+                openModal();
+            }
+        }
+
+        function handleGuardianPinClick() {
+            if (getStoredPinHash()) {
+                openPinModal('change');
+            } else {
+                openPinModal('set');
+            }
+        }
+
+        // ---------- Events ----------
+        document.getElementById('add-words-btn').addEventListener('click', handleAddWordsClick);
+        document.getElementById('modal-cancel').addEventListener('click', closeModal);
+        document.getElementById('modal-add').addEventListener('click', addWordsFromInput);
+        document.getElementById('modal').addEventListener('click', (e) => {
+            if (e.target.id === 'modal') closeModal();
+        });
+
+        // Flyout menu (settings dropdown next to the sidebar header)
+        const flyoutBtn = document.getElementById('flyout-btn');
+        const flyoutMenu = document.getElementById('flyout-menu');
+
+        function closeFlyout() {
+            flyoutMenu.classList.remove('open');
+            flyoutBtn.classList.remove('open');
+            flyoutBtn.setAttribute('aria-expanded', 'false');
+        }
+
+        flyoutBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = flyoutMenu.classList.toggle('open');
+            flyoutBtn.classList.toggle('open', isOpen);
+            flyoutBtn.setAttribute('aria-expanded', String(isOpen));
+        });
+
+        // Clicks anywhere outside the flyout close it. Clicks inside on a
+        // menu item run their own handler first (e.g. open PIN modal) and
+        // we close the flyout afterward.
+        document.addEventListener('click', (e) => {
+            if (!flyoutMenu.classList.contains('open')) return;
+            if (flyoutMenu.contains(e.target) || flyoutBtn.contains(e.target)) return;
+            closeFlyout();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && flyoutMenu.classList.contains('open')) closeFlyout();
+        });
+
+        document.getElementById('guardian-pin-btn').addEventListener('click', () => {
+            closeFlyout();
+            handleGuardianPinClick();
+        });
+        document.getElementById('pin-cancel').addEventListener('click', closePinModal);
+        document.getElementById('pin-submit').addEventListener('click', submitPinModal);
+        document.getElementById('pin-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'pin-modal') closePinModal();
+        });
+        document.getElementById('pin-modal').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); submitPinModal(); }
+            else if (e.key === 'Escape') { closePinModal(); }
+        });
+        document.getElementById('pin-remove').addEventListener('click', async () => {
+            const errEl = document.getElementById('pin-error');
+            const cur = document.getElementById('pin-current').value;
+            const storedHash = getStoredPinHash();
+            if (!storedHash) { closePinModal(); return; }
+            const curHash = await hashPin(cur);
+            if (curHash !== storedHash) { errEl.textContent = 'Incorrect PIN.'; return; }
+            setStoredPinHash(null);
+            updatePinStatusBadge();
+            closePinModal();
+        });
+
+        document.getElementById('check-btn').addEventListener('click', () => {
+            state.graded = true;
+            render();
+            document.querySelector('.main-scroll').scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            buildTest();
+            render();
+        });
+
+        const filterToggle = document.getElementById('filter-words-toggle');
+
+        function applyFilterToggle(checked) {
+            filterToggle.checked = checked;
+            state.filterRealWords = checked;
+            saveFilterPref();
+            buildTest();
+            render();
+        }
+
+        // Intercept before the checkbox visually flips. If a PIN is set, block
+        // the toggle and prompt. On successful auth, apply the intended state.
+        filterToggle.addEventListener('click', (e) => {
+            if (!getStoredPinHash()) return; // no PIN: let default behavior run
+            e.preventDefault();
+            const intended = !filterToggle.checked;
+            openPinModal('auth', () => applyFilterToggle(intended));
+        });
+
+        // Fires only when click wasn't prevented (no PIN set).
+        filterToggle.addEventListener('change', () => {
+            state.filterRealWords = filterToggle.checked;
+            saveFilterPref();
+            buildTest();
+            render();
+        });
+
+        // ---------- Init ----------
+        loadWords();
+        filterToggle.checked = state.filterRealWords;
+        updatePinStatusBadge();
+        buildTest();
+        render();
+    </script>
+</body>
+</html>
