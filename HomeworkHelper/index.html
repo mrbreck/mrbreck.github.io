@@ -1665,10 +1665,15 @@
 
         // Intercept before the checkbox visually flips. If a PIN is set, block
         // the toggle and prompt. On successful auth, apply the intended state.
+        // Note: browsers differ on whether `filterToggle.checked` has already
+        // been flipped by the time the click event fires, so we derive the
+        // intended state from our authoritative `state.filterRealWords` and
+        // also re-sync the DOM in case the browser got ahead of us.
         filterToggle.addEventListener('click', (e) => {
             if (!getStoredPinHash()) return; // no PIN: let default behavior run
             e.preventDefault();
-            const intended = !filterToggle.checked;
+            const intended = !state.filterRealWords;
+            filterToggle.checked = state.filterRealWords;
             openPinModal('auth', () => applyFilterToggle(intended));
         });
 
