@@ -300,7 +300,37 @@
             color: #7f8c8d;
             font-size: 0.9rem;
             margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
         }
+        .btn-listen {
+            background: #ecf0f1;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #34495e;
+            transition: background 0.15s, color 0.15s, transform 0.08s;
+            padding: 0;
+        }
+        .btn-listen:hover { background: #3498db; color: white; }
+        .btn-listen:active { transform: scale(0.92); }
+        .btn-listen.speaking {
+            background: #3498db;
+            color: white;
+            animation: listen-pulse 1s ease-in-out infinite;
+        }
+        @keyframes listen-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(52, 152, 219, 0.6); }
+            50%     { box-shadow: 0 0 0 6px rgba(52, 152, 219, 0); }
+        }
+        body.no-tts .btn-listen { display: none; }
         .choices { display: flex; flex-direction: column; gap: 8px; }
         .choice {
             display: flex;
@@ -767,6 +797,148 @@
             ['ee',  'ea',   6],   // need->nead, seem->seam (often a word)
         ];
 
+        // Homophone groups — words that sound alike but are spelled differently.
+        // When the target word is in one of these groups, the siblings become
+        // candidate distractors. They're all real words, so they only slip
+        // through when the "real words allowed" mode is on (teacher-read
+        // quizzes); in solo mode the dictionary filter removes them. That's
+        // the intended behavior — homophone confusion only makes sense when
+        // the student hears the word rather than seeing the context.
+        const HOMOPHONE_GROUPS = [
+            ['there', 'their', "they're"],
+            ['to', 'too', 'two'],
+            ['your', "you're"],
+            ['its', "it's"],
+            ['hear', 'here'],
+            ['by', 'buy', 'bye'],
+            ['week', 'weak'],
+            ['eight', 'ate'],
+            ['write', 'right', 'rite'],
+            ['knight', 'night'],
+            ['sea', 'see'],
+            ['be', 'bee'],
+            ['know', 'no'],
+            ['knew', 'new'],
+            ['blew', 'blue'],
+            ['flower', 'flour'],
+            ['meat', 'meet'],
+            ['mail', 'male'],
+            ['tail', 'tale'],
+            ['role', 'roll'],
+            ['hole', 'whole'],
+            ['made', 'maid'],
+            ['wait', 'weight'],
+            ['waste', 'waist'],
+            ['peace', 'piece'],
+            ['plain', 'plane'],
+            ['principle', 'principal'],
+            ['fair', 'fare'],
+            ['break', 'brake'],
+            ['bear', 'bare'],
+            ['pair', 'pear', 'pare'],
+            ['hair', 'hare'],
+            ['son', 'sun'],
+            ['one', 'won'],
+            ['dear', 'deer'],
+            ['allowed', 'aloud'],
+            ['board', 'bored'],
+            ['ceiling', 'sealing'],
+            ['cell', 'sell'],
+            ['cent', 'scent', 'sent'],
+            ['close', 'clothes'],
+            ['die', 'dye'],
+            ['flea', 'flee'],
+            ['for', 'four'],
+            ['heal', 'heel'],
+            ['hour', 'our'],
+            ['in', 'inn'],
+            ['lead', 'led'],
+            ['not', 'knot'],
+            ['pause', 'paws'],
+            ['poor', 'pour'],
+            ['road', 'rode', 'rowed'],
+            ['sail', 'sale'],
+            ['scene', 'seen'],
+            ['sew', 'so', 'sow'],
+            ['sole', 'soul'],
+            ['some', 'sum'],
+            ['steal', 'steel'],
+            ['threw', 'through'],
+            ['tide', 'tied'],
+            ['toe', 'tow'],
+            ['way', 'weigh'],
+            ['wear', 'where'],
+            ['whose', "who's"],
+            ['you', 'ewe', 'yew'],
+            ['aisle', 'isle', "i'll"],
+            ['ant', 'aunt'],
+            ['bare', 'bear'],
+            ['bell', 'belle'],
+            ['berry', 'bury'],
+            ['birth', 'berth'],
+            ['bored', 'board'],
+            ['capital', 'capitol'],
+            ['creak', 'creek'],
+            ['currant', 'current'],
+            ['days', 'daze'],
+            ['fairy', 'ferry'],
+            ['find', 'fined'],
+            ['fir', 'fur'],
+            ['gnu', 'knew', 'new'],
+            ['grate', 'great'],
+            ['hay', 'hey'],
+            ['higher', 'hire'],
+            ['idle', 'idol'],
+            ['loan', 'lone'],
+            ['mail', 'male'],
+            ['meddle', 'medal'],
+            ['might', 'mite'],
+            ['minor', 'miner'],
+            ['morning', 'mourning'],
+            ['muscle', 'mussel'],
+            ['naval', 'navel'],
+            ['pail', 'pale'],
+            ['pain', 'pane'],
+            ['peek', 'peak', 'pique'],
+            ['raise', 'rays', 'raze'],
+            ['real', 'reel'],
+            ['right', 'write', 'rite'],
+            ['ring', 'wring'],
+            ['rose', 'rows'],
+            ['seam', 'seem'],
+            ['stair', 'stare'],
+            ['stake', 'steak'],
+            ['stationary', 'stationery'],
+            ['suite', 'sweet'],
+            ['tacks', 'tax'],
+            ['team', 'teem'],
+            ['tear', 'tier'],
+            ['their', 'there', "they're"],
+            ['vain', 'vane', 'vein'],
+            ['wade', 'weighed'],
+            ['warn', 'worn'],
+            ['which', 'witch'],
+            ['wood', 'would'],
+        ];
+
+        // Build target -> [siblings] lookup. Duplicates across groups are fine;
+        // we merge into a single list per word.
+        const HOMOPHONE_LOOKUP = (() => {
+            const m = new Map();
+            for (const group of HOMOPHONE_GROUPS) {
+                for (const word of group) {
+                    const key = word.toLowerCase();
+                    if (!m.has(key)) m.set(key, new Set());
+                    const set = m.get(key);
+                    for (const sibling of group) {
+                        const sib = sibling.toLowerCase();
+                        if (sib !== key) set.add(sib);
+                    }
+                }
+            }
+            return m;
+        })();
+
         function generateMisspellings(word, count, extraExclude, filterRealWords) {
             const lower = word.toLowerCase();
             const scored = new Map(); // text -> best score
@@ -798,6 +970,14 @@
                     add(lower.slice(0, -from.length) + to, 10);
                 }
             }
+
+            // --- Tier 10: homophones ---
+            // These only survive when filter-real-words is off (teacher-read
+            // mode). In solo mode the dict filter strips them, which is the
+            // correct behavior — you can't distinguish homophones visually
+            // without context.
+            const homs = HOMOPHONE_LOOKUP.get(lower);
+            if (homs) for (const h of homs) add(h, 10);
 
             // --- Phonetic / digraph swaps (kid-by-ear spellings) ---
             // Scores vary per entry; see PHONETIC_SWAPS. Apply to every
@@ -1124,7 +1304,12 @@
 
                 return `
                     <div class="question ${state.graded ? 'graded' : ''}">
-                        <div class="question-header">Question ${qIdx + 1}</div>
+                        <div class="question-header">
+                            <span>Question ${qIdx + 1}</span>
+                            <button class="btn-listen" data-word="${escapeHtml(q.word)}" aria-label="Read word aloud" title="Read word aloud">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M3 10v4h4l5 4V6L7 10H3zm11 2a3 3 0 0 0-2-2.82v5.64A3 3 0 0 0 14 12zm-2-7.5v1.54c2.3.57 4 2.67 4 5.26s-1.7 4.69-4 5.26v1.54c3.16-.65 5.5-3.44 5.5-6.8S15.16 4.75 12 4.5z"/></svg>
+                            </button>
+                        </div>
                         <div class="choices">${choicesHtml}</div>
                     </div>`;
             }).join('');
@@ -1140,12 +1325,38 @@
                     render();
                 });
             });
+
+            // Wire up listen buttons
+            container.querySelectorAll('.btn-listen').forEach(btn => {
+                btn.addEventListener('click', () => speakWord(btn.dataset.word, btn));
+            });
         }
 
         function escapeHtml(s) {
             return s.replace(/[&<>"']/g, c => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
             }[c]));
+        }
+
+        // ---------- Text-to-speech ----------
+        const TTS_AVAILABLE = 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined';
+        if (!TTS_AVAILABLE) document.body.classList.add('no-tts');
+
+        function speakWord(word, buttonEl) {
+            if (!TTS_AVAILABLE || !word) return;
+            window.speechSynthesis.cancel();
+            const utter = new SpeechSynthesisUtterance(word);
+            utter.lang = 'en-US';
+            utter.rate = 0.85; // a little slower than default, easier to catch
+            if (buttonEl) {
+                // Remove pulse from any other button currently marked speaking.
+                document.querySelectorAll('.btn-listen.speaking').forEach(b => b.classList.remove('speaking'));
+                buttonEl.classList.add('speaking');
+                const clear = () => buttonEl.classList.remove('speaking');
+                utter.onend = clear;
+                utter.onerror = clear;
+            }
+            window.speechSynthesis.speak(utter);
         }
 
         // ---------- Modal ----------
