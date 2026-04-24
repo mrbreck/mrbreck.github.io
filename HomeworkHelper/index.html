@@ -1677,8 +1677,17 @@
             openPinModal('auth', () => applyFilterToggle(intended));
         });
 
-        // Fires only when click wasn't prevented (no PIN set).
+        // On most browsers this only fires when the click wasn't prevented.
+        // On iOS WebKit it can fire even when preventDefault was called on the
+        // click (because the browser toggles state before dispatching click).
+        // Guard against that: if a PIN is set, ignore change events entirely —
+        // the click handler's PIN flow is the only authorized path to update
+        // state. We also re-sync the DOM to our source of truth.
         filterToggle.addEventListener('change', () => {
+            if (getStoredPinHash()) {
+                filterToggle.checked = state.filterRealWords;
+                return;
+            }
             state.filterRealWords = filterToggle.checked;
             saveFilterPref();
             buildTest();
