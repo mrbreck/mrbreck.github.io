@@ -285,8 +285,9 @@
 
         .options-row {
             display: flex;
+            flex-wrap: wrap;
             align-items: center;
-            gap: 8px;
+            gap: 10px 20px;
             padding: 10px 14px;
             background: white;
             border-radius: 6px;
@@ -309,6 +310,41 @@
             color: #7f8c8d;
             font-size: 0.85rem;
         }
+        .filter-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .filter-option.hidden { display: none; }
+
+        /* Quiz style switch (multiple choice vs. type it), per list. */
+        .mode-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .mode-label { color: #34495e; }
+        .mode-switch {
+            display: inline-flex;
+            border: 1px solid #d5dbe0;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .mode-switch button {
+            background: white;
+            border: none;
+            padding: 6px 12px;
+            font: inherit;
+            font-size: 0.85rem;
+            color: #34495e;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        .mode-switch button + button { border-left: 1px solid #d5dbe0; }
+        .mode-switch button:hover { background: #f4f6f9; }
+        .mode-switch button.active { background: #3498db; color: white; }
+        .mode-lock { display: none; color: #95a5a6; }
+        body.pin-on .mode-lock { display: inline-flex; }
 
         /* Empty state */
         .empty-state {
@@ -433,6 +469,68 @@
         .choice.incorrect .mark { color: #c0392b; }
         .graded .choice { cursor: default; }
         .graded .choice:hover { background: inherit; }
+
+        /* Typed questions: listen button + a blank box. */
+        .typed-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn-listen.btn-listen-lg {
+            width: 44px;
+            height: 44px;
+            flex-shrink: 0;
+        }
+        .btn-listen-lg svg { width: 20px; height: 20px; }
+        .typed-input {
+            flex: 1;
+            min-width: 0;
+            padding: 10px 12px;
+            border: 2px solid #ecf0f1;
+            border-radius: 6px;
+            font: inherit;
+            /* 16px+ keeps iOS from zooming in when the box is tapped. */
+            font-size: 1.1rem;
+            color: #222;
+            background: white;
+        }
+        .typed-input:focus {
+            outline: none;
+            border-color: #3498db;
+            background: #ebf5fb;
+        }
+        .typed-answer {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            border: 2px solid #ecf0f1;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            overflow-wrap: anywhere;
+        }
+        .typed-answer .mark {
+            margin-left: auto;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .typed-answer.correct { border-color: #27ae60; background: #eafaf1; }
+        .typed-answer.correct .mark { color: #27ae60; }
+        .typed-answer.incorrect { border-color: #c0392b; background: #fdedec; }
+        .typed-answer.incorrect .mark { color: #c0392b; }
+        .correct-spelling {
+            margin-top: 10px;
+            padding-left: 54px;
+            color: #34495e;
+            font-size: 0.95rem;
+        }
+        .correct-spelling strong {
+            color: #27ae60;
+            font-size: 1.1rem;
+            letter-spacing: 0.02em;
+        }
 
         /* Modal */
         .modal-overlay {
@@ -684,11 +782,23 @@
             </div>
 
             <div class="options-row">
-                <label>
-                    <input type="checkbox" id="filter-words-toggle" checked>
-                    <span>Only show misspellings (no real-word distractors)</span>
-                </label>
-                <span class="option-hint">&mdash; turn off for teacher-read quizzes</span>
+                <div class="mode-row">
+                    <span class="mode-label">Quiz style</span>
+                    <div class="mode-switch" id="mode-switch" role="radiogroup" aria-label="Quiz style">
+                        <button type="button" data-mode="choice" role="radio">Multiple choice</button>
+                        <button type="button" data-mode="typed" role="radio">Type it</button>
+                    </div>
+                    <span class="mode-lock" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 1 1 6 0v3H9z"/></svg>
+                    </span>
+                </div>
+                <div class="filter-option" id="filter-option">
+                    <label>
+                        <input type="checkbox" id="filter-words-toggle" checked>
+                        <span>Only show misspellings (no real-word distractors)</span>
+                    </label>
+                    <span class="option-hint">&mdash; turn off for teacher-read quizzes</span>
+                </div>
             </div>
         </div>
 
@@ -755,7 +865,43 @@
         const FILTER_STORAGE_KEY = 'homework-helper-filter-real-words';
         const PIN_STORAGE_KEY = 'homework-helper-guardian-pin-hash';
         const LIST_STORAGE_KEY = 'homework-helper-spelling-list';
+        const MODE_STORAGE_KEY = 'homework-helper-quiz-modes';
         const CUSTOM_LIST_ID = 'custom';
+
+        // Quiz style per list: 'choice' (multiple choice, default) or
+        // 'typed' (hear the word, type it). Keyed by list id.
+        let quizModes = {};
+        try {
+            quizModes = JSON.parse(localStorage.getItem(MODE_STORAGE_KEY)) || {};
+        } catch (e) {
+            quizModes = {};
+        }
+
+        function currentMode() {
+            return quizModes[state.listId] === 'typed' ? 'typed' : 'choice';
+        }
+
+        function saveModes() {
+            localStorage.setItem(MODE_STORAGE_KEY, JSON.stringify(quizModes));
+        }
+
+        // Typed answers: ignore case/extra spaces, and treat iOS "smart"
+        // apostrophes like plain ones.
+        function normalizeAnswer(s) {
+            return (s || '').trim().toLowerCase().replace(/[‘’]/g, "'");
+        }
+
+        function isAnswered(q) {
+            return currentMode() === 'typed'
+                ? normalizeAnswer(q.typed) !== ''
+                : q.selected !== null;
+        }
+
+        function isCorrect(q) {
+            return currentMode() === 'typed'
+                ? normalizeAnswer(q.typed) === q.word
+                : q.selected !== null && q.choices[q.selected] === q.word;
+        }
         // Static salt so a common PIN like "1234" doesn't hash to a value
         // findable in a public rainbow table. Easy to bypass for a skilled
         // user; that's fine — the goal is just to slow down a curious kid.
@@ -1404,17 +1550,21 @@
         function buildTest() {
             const words = [...activeWords()];
             const challenge = activeChallengeSet();
+            const typed = currentMode() === 'typed';
             shuffle(words);
             // Exclude all other test words from each question's distractors so
             // a misspelling of one word can't happen to match another target.
             const allTargets = new Set(words.map(w => w.toLowerCase()));
             state.test = words.map(word => {
                 const lower = word.toLowerCase();
-                const exclude = new Set(allTargets);
-                exclude.delete(lower);
-                const misspellings = generateMisspellings(word, 3, exclude, state.filterRealWords);
-                const choices = shuffle([lower, ...misspellings]);
-                return { word: lower, choices, selected: null, challenge: challenge.has(lower) };
+                let choices = [];
+                if (!typed) {
+                    const exclude = new Set(allTargets);
+                    exclude.delete(lower);
+                    const misspellings = generateMisspellings(word, 3, exclude, state.filterRealWords);
+                    choices = shuffle([lower, ...misspellings]);
+                }
+                return { word: lower, choices, selected: null, typed: '', challenge: challenge.has(lower) };
             });
             state.graded = false;
         }
@@ -1477,9 +1627,34 @@
                 subtitle.textContent = `Unit ${list.unit}, Lesson ${list.lesson} · Test on ${fmtLong(list.date)}`;
                 addBtn.style.display = 'none';
             } else {
-                subtitle.textContent = 'Add your spelling words, then take a multiple-choice quiz.';
+                subtitle.textContent = 'Add your spelling words, then take the quiz.';
                 addBtn.style.display = '';
             }
+
+            const mode = currentMode();
+            document.querySelectorAll('#mode-switch button').forEach(btn => {
+                const on = btn.dataset.mode === mode;
+                btn.classList.toggle('active', on);
+                btn.setAttribute('aria-checked', String(on));
+            });
+            // The real-word filter only matters for multiple choice.
+            document.getElementById('filter-option').classList.toggle('hidden', mode === 'typed');
+        }
+
+        // Switching quiz style is guarded by the Guardian PIN (when one is
+        // set) so a kid can't flip a typed test back to multiple choice.
+        function setQuizMode(mode) {
+            if (mode === currentMode()) return;
+            const apply = () => {
+                quizModes[state.listId] = mode;
+                saveModes();
+                buildTest();
+                renderHeader();
+                render();
+                document.querySelector('.main-scroll').scrollTo({ top: 0 });
+            };
+            if (getStoredPinHash()) openPinModal('auth', apply);
+            else apply();
         }
 
         function selectList(id) {
@@ -1504,7 +1679,6 @@
         // ---------- Rendering ----------
         function render() {
             const container = document.getElementById('test-container');
-            const checkBtn = document.getElementById('check-btn');
             const resetBtn = document.getElementById('reset-btn');
             const bottomBar = document.getElementById('main-bottom');
 
@@ -1521,15 +1695,11 @@
             bottomBar.style.display = 'flex';
             resetBtn.style.display = 'inline-block';
 
-            const allAnswered = state.test.every(q => q.selected !== null);
-            checkBtn.disabled = !allAnswered || state.graded;
-            checkBtn.title = allAnswered ? '' : 'Answer every question first';
+            updateCheckButton();
 
-            let correctCount = 0;
-            if (state.graded) {
-                correctCount = state.test.reduce((n, q) =>
-                    n + (q.selected !== null && q.choices[q.selected] === q.word ? 1 : 0), 0);
-            }
+            const correctCount = state.graded
+                ? state.test.reduce((n, q) => n + (isCorrect(q) ? 1 : 0), 0)
+                : 0;
 
             const percent = state.test.length
                 ? Math.round((correctCount / state.test.length) * 100)
@@ -1544,42 +1714,10 @@
                        <span class="score-value">${state.test.length} word${state.test.length === 1 ? '' : 's'}</span>
                    </div>`;
 
-            const questionsHtml = state.test.map((q, qIdx) => {
-                const choicesHtml = q.choices.map((choice, cIdx) => {
-                    const isSelected = q.selected === cIdx;
-                    const isCorrect = choice === q.word;
-                    let cls = 'choice';
-                    let mark = '';
-                    if (state.graded) {
-                        if (isCorrect) {
-                            cls += ' correct';
-                            mark = '<span class="mark">&#10003;</span>';
-                        } else if (isSelected) {
-                            cls += ' incorrect';
-                            mark = '<span class="mark">&#10007;</span>';
-                        }
-                    } else if (isSelected) {
-                        cls += ' selected';
-                    }
-                    return `
-                        <label class="${cls}">
-                            <input type="radio" name="q${qIdx}" value="${cIdx}" ${isSelected ? 'checked' : ''} ${state.graded ? 'disabled' : ''}>
-                            <span>${escapeHtml(choice)}</span>
-                            ${mark}
-                        </label>`;
-                }).join('');
-
-                return `
-                    <div class="question ${state.graded ? 'graded' : ''}">
-                        <div class="question-header">
-                            <span>Question ${qIdx + 1}${q.challenge ? '<span class="tag-challenge">Challenge</span>' : ''}</span>
-                            <button class="btn-listen" data-word="${escapeHtml(q.word)}" aria-label="Read word aloud" title="Read word aloud">
-                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M3 10v4h4l5 4V6L7 10H3zm11 2a3 3 0 0 0-2-2.82v5.64A3 3 0 0 0 14 12zm-2-7.5v1.54c2.3.57 4 2.67 4 5.26s-1.7 4.69-4 5.26v1.54c3.16-.65 5.5-3.44 5.5-6.8S15.16 4.75 12 4.5z"/></svg>
-                            </button>
-                        </div>
-                        <div class="choices">${choicesHtml}</div>
-                    </div>`;
-            }).join('');
+            const typedMode = currentMode() === 'typed';
+            const questionsHtml = state.test
+                .map((q, qIdx) => typedMode ? typedQuestionHtml(q, qIdx) : choiceQuestionHtml(q, qIdx))
+                .join('');
 
             container.innerHTML = scoreHtml + questionsHtml;
 
@@ -1593,10 +1731,119 @@
                 });
             });
 
-            // Wire up listen buttons
-            container.querySelectorAll('.btn-listen').forEach(btn => {
-                btn.addEventListener('click', () => speakWord(btn.dataset.word, btn));
+            // Wire up typed answers. Don't re-render while typing (that would
+            // drop focus); just record the text and refresh the Check button.
+            container.querySelectorAll('.typed-input').forEach(input => {
+                const idx = parseInt(input.dataset.idx);
+                input.addEventListener('input', () => {
+                    state.test[idx].typed = input.value;
+                    updateCheckButton();
+                });
+                // Enter / "Next" on a phone keyboard moves to the next word.
+                input.addEventListener('keydown', (e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    const next = container.querySelector(`.typed-input[data-idx="${idx + 1}"]`);
+                    if (next) next.focus();
+                    else input.blur();
+                });
             });
+
+            // Wire up listen buttons. They carry only the question number,
+            // never the word itself.
+            container.querySelectorAll('.btn-listen').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const q = state.test[parseInt(btn.dataset.idx)];
+                    if (q) speakWord(q.word, btn);
+                });
+            });
+        }
+
+        function updateCheckButton() {
+            const checkBtn = document.getElementById('check-btn');
+            const allAnswered = state.test.every(isAnswered);
+            checkBtn.disabled = !allAnswered || state.graded;
+            checkBtn.title = allAnswered ? '' : 'Answer every question first';
+        }
+
+        const LISTEN_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M3 10v4h4l5 4V6L7 10H3zm11 2a3 3 0 0 0-2-2.82v5.64A3 3 0 0 0 14 12zm-2-7.5v1.54c2.3.57 4 2.67 4 5.26s-1.7 4.69-4 5.26v1.54c3.16-.65 5.5-3.44 5.5-6.8S15.16 4.75 12 4.5z"/></svg>';
+
+        function questionLabel(q, qIdx) {
+            return `Question ${qIdx + 1}${q.challenge ? '<span class="tag-challenge">Challenge</span>' : ''}`;
+        }
+
+        function choiceQuestionHtml(q, qIdx) {
+            const choicesHtml = q.choices.map((choice, cIdx) => {
+                const isSelected = q.selected === cIdx;
+                const isRight = choice === q.word;
+                let cls = 'choice';
+                let mark = '';
+                if (state.graded) {
+                    if (isRight) {
+                        cls += ' correct';
+                        mark = '<span class="mark">&#10003;</span>';
+                    } else if (isSelected) {
+                        cls += ' incorrect';
+                        mark = '<span class="mark">&#10007;</span>';
+                    }
+                } else if (isSelected) {
+                    cls += ' selected';
+                }
+                return `
+                    <label class="${cls}">
+                        <input type="radio" name="q${qIdx}" value="${cIdx}" ${isSelected ? 'checked' : ''} ${state.graded ? 'disabled' : ''}>
+                        <span>${escapeHtml(choice)}</span>
+                        ${mark}
+                    </label>`;
+            }).join('');
+
+            return `
+                <div class="question ${state.graded ? 'graded' : ''}">
+                    <div class="question-header">
+                        <span>${questionLabel(q, qIdx)}</span>
+                        <button class="btn-listen" data-idx="${qIdx}" aria-label="Play word">${LISTEN_ICON}</button>
+                    </div>
+                    <div class="choices">${choicesHtml}</div>
+                </div>`;
+        }
+
+        // Typed question. Before grading, the word is nowhere in the page:
+        // no attributes, no tooltips, and the box has spell-check,
+        // autocorrect and autocomplete off so the browser can't hint either.
+        // It has no name/id, so the browser keeps no history of past answers.
+        function typedQuestionHtml(q, qIdx) {
+            const listenBtn = `<button class="btn-listen btn-listen-lg" data-idx="${qIdx}" aria-label="Play word">${LISTEN_ICON}</button>`;
+
+            if (!state.graded) {
+                return `
+                    <div class="question">
+                        <div class="question-header"><span>${questionLabel(q, qIdx)}</span></div>
+                        <div class="typed-row">
+                            ${listenBtn}
+                            <input class="typed-input" type="text" data-idx="${qIdx}"
+                                value="${escapeHtml(q.typed || '')}"
+                                aria-label="Answer ${qIdx + 1}"
+                                autocomplete="off" autocorrect="off" autocapitalize="none"
+                                spellcheck="false" enterkeyhint="next"
+                                data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false">
+                        </div>
+                    </div>`;
+            }
+
+            const right = isCorrect(q);
+            const answer = normalizeAnswer(q.typed);
+            return `
+                <div class="question graded">
+                    <div class="question-header"><span>${questionLabel(q, qIdx)}</span></div>
+                    <div class="typed-row">
+                        ${listenBtn}
+                        <div class="typed-answer ${right ? 'correct' : 'incorrect'}">
+                            <span>${escapeHtml(answer)}</span>
+                            <span class="mark">${right ? '&#10003;' : '&#10007;'}</span>
+                        </div>
+                    </div>
+                    ${right ? '' : `<div class="correct-spelling">Correct spelling: <strong>${escapeHtml(q.word)}</strong></div>`}
+                </div>`;
         }
 
         function escapeHtml(s) {
@@ -1701,6 +1948,7 @@
 
         function updatePinStatusBadge() {
             const badge = document.getElementById('pin-status-badge');
+            document.body.classList.toggle('pin-on', !!getStoredPinHash());
             if (getStoredPinHash()) {
                 badge.textContent = 'on';
                 badge.classList.remove('off');
@@ -1740,7 +1988,7 @@
                 removeBtn.style.display = 'none';
             } else if (mode === 'set') {
                 title.textContent = 'Set Guardian PIN';
-                hint.textContent = 'Choose a PIN (4+ characters). You will need it to add or change words.';
+                hint.textContent = 'Choose a PIN (4+ characters). You will need it to add or change words and quiz settings.';
                 curField.style.display = 'none';
                 newField.style.display = '';
                 confirmField.style.display = '';
@@ -1961,6 +2209,10 @@
             sessions.clear();
             buildTest();
             render();
+        });
+
+        document.querySelectorAll('#mode-switch button').forEach(btn => {
+            btn.addEventListener('click', () => setQuizMode(btn.dataset.mode));
         });
 
         // Spelling Test parent row collapses/expands its submenu.
