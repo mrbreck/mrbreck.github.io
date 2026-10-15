@@ -130,17 +130,75 @@
         }
         .sidebar-helpers:hover::-webkit-scrollbar-thumb { background: #3d5166; }
 
-        .helper-list { list-style: none; }
-        .helper-list li {
+        .helper-list, .sub-list { list-style: none; }
+        .helper-parent {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
             padding: 10px 20px;
+            background: transparent;
+            border: none;
+            border-left: 3px solid transparent;
+            color: #ecf0f1;
+            font: inherit;
+            text-align: left;
             cursor: pointer;
             transition: background 0.15s;
-            border-left: 3px solid transparent;
         }
-        .helper-list li:hover { background: #34495e; }
-        .helper-list li.active {
+        .helper-parent:hover { background: #34495e; }
+        .helper-parent .caret {
+            font-size: 0.75rem;
+            color: #95a5a6;
+            transition: transform 0.15s;
+        }
+        .helper-group:not(.open) .caret { transform: rotate(-90deg); }
+        .helper-group:not(.open) .sub-list { display: none; }
+
+        /* Submenu items: one per spelling list (My Words + each week). */
+        .sub-item {
+            width: 100%;
+            min-height: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 2px;
+            padding: 8px 20px 8px 34px;
+            background: transparent;
+            border: none;
+            border-left: 3px solid transparent;
+            color: #bdc3c7;
+            font: inherit;
+            font-size: 0.9rem;
+            text-align: left;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        .sub-item:hover { background: #34495e; color: #ecf0f1; }
+        .sub-item.active {
             background: #34495e;
             border-left-color: #3498db;
+            color: #ecf0f1;
+        }
+        .sub-item.past:not(.active) { color: #8a9ba8; }
+        .sub-title {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .sub-meta {
+            font-size: 0.75rem;
+            color: #95a5a6;
+        }
+        .badge-now {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 10px;
+            font-size: 0.65rem;
+            background: #27ae60;
+            color: white;
+            white-space: nowrap;
         }
 
         /* Main (three-zone layout: top bar, scroll area, bottom bar) */
@@ -331,6 +389,17 @@
             50%     { box-shadow: 0 0 0 6px rgba(52, 152, 219, 0); }
         }
         body.no-tts .btn-listen { display: none; }
+        .tag-challenge {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 1px 8px;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: #fdebd0;
+            color: #b9770e;
+            vertical-align: middle;
+        }
         .choices { display: flex; flex-direction: column; gap: 8px; }
         .choice {
             display: flex;
@@ -593,7 +662,13 @@
         <div class="sidebar-section-label">Helpers</div>
         <div class="sidebar-helpers">
             <ul class="helper-list">
-                <li class="active" data-helper="spelling">Spelling Test</li>
+                <li class="helper-group open" id="spelling-group">
+                    <button class="helper-parent" id="spelling-parent" aria-expanded="true" aria-controls="spelling-sub-list">
+                        <span>Spelling Test</span>
+                        <span class="caret" aria-hidden="true">&#9662;</span>
+                    </button>
+                    <ul class="sub-list" id="spelling-sub-list"></ul>
+                </li>
             </ul>
         </div>
     </aside>
@@ -601,7 +676,7 @@
     <main class="main">
         <div class="main-top">
             <h2>Spelling Test</h2>
-            <p class="subtitle">Add your spelling words, then take a multiple-choice quiz.</p>
+            <p class="subtitle" id="subtitle">Add your spelling words, then take a multiple-choice quiz.</p>
 
             <div class="button-row">
                 <button class="btn btn-primary" id="add-words-btn">Add Words</button>
@@ -627,6 +702,7 @@
     </main>
 
     <script src="wordlist.js"></script>
+    <script src="spelling-lists.js"></script>
 
     <div class="modal-overlay" id="modal">
         <div class="modal">
@@ -678,17 +754,84 @@
         const STORAGE_KEY = 'homework-helper-spelling-words';
         const FILTER_STORAGE_KEY = 'homework-helper-filter-real-words';
         const PIN_STORAGE_KEY = 'homework-helper-guardian-pin-hash';
+        const LIST_STORAGE_KEY = 'homework-helper-spelling-list';
+        const CUSTOM_LIST_ID = 'custom';
         // Static salt so a common PIN like "1234" doesn't hash to a value
         // findable in a public rainbow table. Easy to bypass for a skilled
         // user; that's fine — the goal is just to slow down a curious kid.
         const PIN_SALT = 'hh-guardian::';
 
         const state = {
-            words: [],
-            test: [],      // [{ word, choices: [str], selected: null|idx }]
+            words: [],     // the user's own list ("My Words")
+            listId: CUSTOM_LIST_ID, // which list the quiz is using
+            test: [],      // [{ word, choices: [str], selected: null|idx, challenge: bool }]
             graded: false,
             filterRealWords: true, // when false, real English words may be used as distractors
         };
+
+        // In-progress tests for lists you've switched away from, so flipping
+        // between weeks doesn't throw away answers. Memory only.
+        const sessions = new Map();
+
+        // ---------- Weekly lists (from spelling-lists.js) ----------
+        function parseLocalDate(iso) {
+            const [y, m, d] = iso.split('-').map(Number);
+            return new Date(y, m - 1, d);
+        }
+
+        function todayLocal() {
+            const now = new Date();
+            return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        }
+
+        // Expand 'wolf/wolves' entries into separate words and remember which
+        // singular each plural came from (used for "wolfs"-style traps).
+        const PLURAL_TO_SINGULAR = new Map();
+
+        const SPELLING_LISTS = (window.HOMEWORK_HELPER_SPELLING_LISTS || [])
+            .map(list => {
+                const words = [];
+                const push = w => {
+                    const lower = w.trim().toLowerCase();
+                    if (lower && !words.includes(lower)) words.push(lower);
+                };
+                for (const entry of list.words || []) {
+                    const parts = entry.split('/').map(p => p.trim().toLowerCase()).filter(Boolean);
+                    if (parts.length === 2 && parts[0] !== parts[1]) {
+                        PLURAL_TO_SINGULAR.set(parts[1], parts[0]);
+                    }
+                    parts.forEach(push);
+                }
+                const challenge = (list.challenge || []).map(w => w.trim().toLowerCase());
+                challenge.forEach(push);
+                return {
+                    ...list,
+                    date: parseLocalDate(list.testDate),
+                    allWords: words,
+                    challengeSet: new Set(challenge),
+                };
+            })
+            .sort((a, b) => a.date - b.date);
+
+        function getList(id) {
+            return SPELLING_LISTS.find(l => l.id === id) || null;
+        }
+
+        // The next list whose test is today or later.
+        function getUpcomingList() {
+            const today = todayLocal();
+            return SPELLING_LISTS.find(l => l.date >= today) || null;
+        }
+
+        function activeWords() {
+            const list = getList(state.listId);
+            return list ? list.allWords : state.words;
+        }
+
+        function activeChallengeSet() {
+            const list = getList(state.listId);
+            return list ? list.challengeSet : new Set();
+        }
 
         // ---------- Storage ----------
         function loadWords() {
@@ -701,10 +844,32 @@
             // Default to true if never set.
             const filter = localStorage.getItem(FILTER_STORAGE_KEY);
             state.filterRealWords = filter === null ? true : filter === 'true';
+
+            // Reopen the last list, unless it was a week whose test has
+            // passed; then jump to the upcoming week so a new week "just
+            // shows up" without anyone clicking.
+            const saved = localStorage.getItem(LIST_STORAGE_KEY);
+            const savedList = getList(saved);
+            const upcoming = getUpcomingList();
+            if (saved === CUSTOM_LIST_ID) {
+                state.listId = CUSTOM_LIST_ID;
+            } else if (savedList && savedList.date >= todayLocal()) {
+                state.listId = savedList.id;
+            } else if (upcoming) {
+                state.listId = upcoming.id;
+            } else if (state.words.length === 0 && SPELLING_LISTS.length) {
+                state.listId = SPELLING_LISTS[SPELLING_LISTS.length - 1].id;
+            } else {
+                state.listId = CUSTOM_LIST_ID;
+            }
         }
 
         function saveWords() {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(state.words));
+        }
+
+        function saveListPref() {
+            localStorage.setItem(LIST_STORAGE_KEY, state.listId);
         }
 
         function saveFilterPref() {
@@ -757,7 +922,21 @@
             ['cious','tious'],['tious','cious'],
             ['ary',  'ery'],  ['ery',  'ary'],
             ['or',   'er'],   ['er',   'or'],
+            // Forgetting the y -> i change: puppies->puppys, dried->dryed.
+            ['ies',  'ys'],   ['ied',  'yed'],
         ];
+
+        // Kid-style plural mistakes, when we know the singular (from a
+        // 'wolf/wolves' pair): just add -s (wolfs, babys, mouses, childs),
+        // or pluralize the plural (feets, teeths, childrens).
+        function pluralTraps(word) {
+            const singular = PLURAL_TO_SINGULAR.get(word);
+            if (!singular) return [];
+            const traps = [];
+            if (!singular.endsWith('s')) traps.push(singular + 's');
+            if (!word.endsWith('s')) traps.push(word + 's');
+            return traps;
+        }
 
         // Digraph / phonetic substitutions — how kids actually misspell when
         // writing by ear. Each is [pattern, replacement, score] and is applied
@@ -958,11 +1137,15 @@
                 if (!text || text === lower) return;
                 if (!/^[a-z'-]+$/.test(text)) return;
                 if (!/[aeiouy]/.test(text)) return;
+                if (/(.)\1\1/.test(text)) return; // no "glasss"
                 if (exclude.has(text)) return;
                 if (dict && dict.has(text)) return;
                 const prev = scored.get(text);
                 if (prev === undefined || score > prev) scored.set(text, score);
             }
+
+            // --- Tier 10: plural traps (wolf/wolves -> wolfs) ---
+            for (const trap of pluralTraps(lower)) add(trap, 10);
 
             // --- Tier 10: suffix traps ---
             for (const [from, to] of SUFFIX_SWAPS) {
@@ -1172,6 +1355,7 @@
             function tryAdd(candidate) {
                 if (!candidate || candidate === lower) return;
                 if (!/[aeiouy]/.test(candidate)) return;
+                if (/(.)\1\1/.test(candidate)) return;
                 if (exclude.has(candidate)) return;
                 if (dict && dict.has(candidate)) return;
                 if (picks.includes(candidate)) return;
@@ -1218,7 +1402,8 @@
 
         // ---------- Test building ----------
         function buildTest() {
-            const words = [...state.words];
+            const words = [...activeWords()];
+            const challenge = activeChallengeSet();
             shuffle(words);
             // Exclude all other test words from each question's distractors so
             // a misspelling of one word can't happen to match another target.
@@ -1229,9 +1414,91 @@
                 exclude.delete(lower);
                 const misspellings = generateMisspellings(word, 3, exclude, state.filterRealWords);
                 const choices = shuffle([lower, ...misspellings]);
-                return { word: lower, choices, selected: null };
+                return { word: lower, choices, selected: null, challenge: challenge.has(lower) };
             });
             state.graded = false;
+        }
+
+        // ---------- List switching / sidebar ----------
+        const fmtShort = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const fmtTest = d => d.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+        const fmtLong = d => d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+        function weekStart(d) {
+            const monday = new Date(d);
+            monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+            return monday;
+        }
+
+        function renderSidebar() {
+            const ul = document.getElementById('spelling-sub-list');
+            const today = todayLocal();
+            const upcoming = getUpcomingList();
+
+            const items = [`
+                <li>
+                    <button class="sub-item ${state.listId === CUSTOM_LIST_ID ? 'active' : ''}" data-list="${CUSTOM_LIST_ID}">
+                        <span class="sub-title">My Words</span>
+                        <span class="sub-meta">Your own list</span>
+                    </button>
+                </li>`];
+
+            for (const list of SPELLING_LISTS) {
+                const isToday = list.date.getTime() === today.getTime();
+                const badge = list === upcoming
+                    ? `<span class="badge-now">${isToday ? 'Test today' : 'Up next'}</span>`
+                    : '';
+                const cls = ['sub-item'];
+                if (list.id === state.listId) cls.push('active');
+                if (list.date < today) cls.push('past');
+                items.push(`
+                    <li>
+                        <button class="${cls.join(' ')}" data-list="${escapeHtml(list.id)}">
+                            <span class="sub-title">Week of ${fmtShort(weekStart(list.date))} ${badge}</span>
+                            <span class="sub-meta">Lesson ${list.lesson} &middot; Test ${fmtTest(list.date)}</span>
+                        </button>
+                    </li>`);
+            }
+            ul.innerHTML = items.join('');
+
+            ul.querySelectorAll('.sub-item').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    selectList(btn.dataset.list);
+                    closeDrawer();
+                });
+            });
+        }
+
+        function renderHeader() {
+            const list = getList(state.listId);
+            const subtitle = document.getElementById('subtitle');
+            const addBtn = document.getElementById('add-words-btn');
+            if (list) {
+                subtitle.textContent = `Unit ${list.unit}, Lesson ${list.lesson} · Test on ${fmtLong(list.date)}`;
+                addBtn.style.display = 'none';
+            } else {
+                subtitle.textContent = 'Add your spelling words, then take a multiple-choice quiz.';
+                addBtn.style.display = '';
+            }
+        }
+
+        function selectList(id) {
+            if (id === state.listId) return;
+            if (id !== CUSTOM_LIST_ID && !getList(id)) return;
+            sessions.set(state.listId, { test: state.test, graded: state.graded });
+            state.listId = id;
+            saveListPref();
+            const saved = sessions.get(id);
+            if (saved) {
+                state.test = saved.test;
+                state.graded = saved.graded;
+            } else {
+                buildTest();
+            }
+            renderSidebar();
+            renderHeader();
+            render();
+            document.querySelector('.main-scroll').scrollTo({ top: 0 });
         }
 
         // ---------- Rendering ----------
@@ -1241,7 +1508,7 @@
             const resetBtn = document.getElementById('reset-btn');
             const bottomBar = document.getElementById('main-bottom');
 
-            if (state.words.length === 0) {
+            if (activeWords().length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
                         No words yet. Click <strong>Add Words</strong> to get started.
@@ -1305,7 +1572,7 @@
                 return `
                     <div class="question ${state.graded ? 'graded' : ''}">
                         <div class="question-header">
-                            <span>Question ${qIdx + 1}</span>
+                            <span>Question ${qIdx + 1}${q.challenge ? '<span class="tag-challenge">Challenge</span>' : ''}</span>
                             <button class="btn-listen" data-word="${escapeHtml(q.word)}" aria-label="Read word aloud" title="Read word aloud">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M3 10v4h4l5 4V6L7 10H3zm11 2a3 3 0 0 0-2-2.82v5.64A3 3 0 0 0 14 12zm-2-7.5v1.54c2.3.57 4 2.67 4 5.26s-1.7 4.69-4 5.26v1.54c3.16-.65 5.5-3.44 5.5-6.8S15.16 4.75 12 4.5z"/></svg>
                             </button>
@@ -1659,6 +1926,7 @@
             filterToggle.checked = checked;
             state.filterRealWords = checked;
             saveFilterPref();
+            sessions.clear();
             buildTest();
             render();
         }
@@ -1690,16 +1958,28 @@
             }
             state.filterRealWords = filterToggle.checked;
             saveFilterPref();
+            sessions.clear();
             buildTest();
             render();
+        });
+
+        // Spelling Test parent row collapses/expands its submenu.
+        document.getElementById('spelling-parent').addEventListener('click', () => {
+            const group = document.getElementById('spelling-group');
+            const open = group.classList.toggle('open');
+            document.getElementById('spelling-parent').setAttribute('aria-expanded', String(open));
         });
 
         // ---------- Init ----------
         loadWords();
         filterToggle.checked = state.filterRealWords;
         updatePinStatusBadge();
+        renderSidebar();
+        renderHeader();
         buildTest();
         render();
+        const activeItem = document.querySelector('.sub-item.active');
+        if (activeItem) activeItem.scrollIntoView({ block: 'nearest' });
     </script>
 </body>
 </html>
