@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Pre-record every word in HomeworkHelper/spelling-lists.js with a clear
-neural voice (Kokoro: mostly af_heart, blended with af_nicole).
+neural voice (Kokoro af_heart: warm, clear, kid-appropriate).
 
 Output: HomeworkHelper/audio/<hash>.mp3, where <hash> is the first 16 hex
 chars of sha256("hh-audio::" + word). The page computes the same hash, so
@@ -34,9 +34,10 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 LISTS_JS = ROOT / "HomeworkHelper" / "spelling-lists.js"
 OUT_DIR = ROOT / "HomeworkHelper" / "audio"
 
-# af_heart alone sounds best but its F can come out like a V ("fox" heard as
-# "vox"); blending in some af_nicole keeps the sound and fixes that.
-VOICE_BLEND = {"af_heart": 0.6, "af_nicole": 0.4}
+# Don't blend in af_nicole: it's a breathy, whispery voice.
+VOICE_BLEND = {"af_heart": 1.0}
+# Only for a word that no af_heart take gets right (its F can sound like V).
+BACKUP_BLEND = {"af_heart": 0.7, "af_sarah": 0.3}
 SAMPLE_RATE = 24000
 # Tried in order until the checker hears the word right. Slightly slow first,
 # since that's easiest for kids to catch.
@@ -46,6 +47,8 @@ TAKES = [
     dict(speed=1.0, punct=""),
     dict(speed=0.9, punct="."),
     dict(speed=0.8, punct=""),
+    dict(speed=0.85, punct="", blend=BACKUP_BLEND),
+    dict(speed=0.95, punct="", blend=BACKUP_BLEND),
 ]
 SALT = "hh-audio::"
 
@@ -86,12 +89,12 @@ def dictation_phonemes(kokoro: Kokoro, word: str) -> str:
     return ph
 
 
-def voice_style(kokoro: Kokoro) -> np.ndarray:
-    return sum(w * kokoro.get_voice_style(v) for v, w in VOICE_BLEND.items())
+def voice_style(kokoro: Kokoro, blend: dict) -> np.ndarray:
+    return sum(w * kokoro.get_voice_style(v) for v, w in blend.items())
 
 
-def say(kokoro: Kokoro, phonemes: str, speed: float) -> np.ndarray:
-    samples, sr = kokoro.create(phonemes, voice=voice_style(kokoro), speed=speed,
+def say(kokoro: Kokoro, phonemes: str, speed: float, blend: dict = VOICE_BLEND) -> np.ndarray:
+    samples, sr = kokoro.create(phonemes, voice=voice_style(kokoro, blend), speed=speed,
                                 lang="en-us", is_phonemes=True)
     assert sr == SAMPLE_RATE
     peak = float(np.max(np.abs(samples))) or 1.0
@@ -150,14 +153,17 @@ def record(kokoro: Kokoro, word: str, checker: "Checker | None") -> tuple[np.nda
     phonemes = dictation_phonemes(kokoro, word)
     first = None
     for take in TAKES:
-        samples = say(kokoro, phonemes + take["punct"], take["speed"])
+        samples = say(kokoro, phonemes + take["punct"], take["speed"],
+                      take.get("blend", VOICE_BLEND))
         if checker is None:
             return samples, "unchecked"
         heard = checker.heard(samples)
         if first is None:
             first = (samples, heard)
         if checker.ok(word, heard):
-            return samples, f"ok at speed {take['speed']}{' with stop' if take['punct'] else ''}"
+            return samples, (f"ok at speed {take['speed']}"
+                             f"{' with stop' if take['punct'] else ''}"
+                             f"{' (backup voice)' if 'blend' in take else ''}")
     return first[0], f"CHECK FAILED (heard {first[1]!r}); kept first take"
 
 
