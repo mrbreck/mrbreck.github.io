@@ -1673,6 +1673,7 @@
             renderSidebar();
             renderHeader();
             render();
+            prefetchRecordings(activeWords());
             document.querySelector('.main-scroll').scrollTo({ top: 0 });
         }
 
@@ -1852,25 +1853,138 @@
             }[c]));
         }
 
-        // ---------- Text-to-speech ----------
+        // ---------- Speech ----------
+        // Words on the weekly lists are pre-recorded with a clear neural
+        // voice (tools/make_spelling_audio.py) as audio/<hash>.mp3. The hash
+        // hides the word, and clips play from in-memory copies so no file
+        // name shows up in the phone's "Now Playing" either. Words without a
+        // recording (e.g. My Words) use the device's own text-to-speech,
+        // picking the clearest English voice it has.
+        const AUDIO_SALT = 'hh-audio::';
         const TTS_AVAILABLE = 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined';
-        if (!TTS_AVAILABLE) document.body.classList.add('no-tts');
 
-        function speakWord(word, buttonEl) {
-            if (!TTS_AVAILABLE || !word) return;
-            window.speechSynthesis.cancel();
+        const recordingUrls = new Map(); // word -> audio/<hash>.mp3 (only words that have one)
+        const recordingBlobs = new Map(); // word -> blob: URL once downloaded
+        const player = new Audio(); // one element, reused: iOS unlocks it on the first tap
+        player.preload = 'auto';
+        let recordingsReady = null;
+
+        // Plays through the iPhone silent switch, like a video would.
+        try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+
+        function loadRecordings() {
+            recordingsReady = (async () => {
+                try {
+                    if (!(window.crypto && crypto.subtle)) return;
+                    const res = await fetch('audio/index.json', { cache: 'no-cache' });
+                    if (!res.ok) return;
+                    const available = new Set(await res.json());
+                    const words = new Set(SPELLING_LISTS.flatMap(l => l.allWords));
+                    for (const w of words) {
+                        const name = (await sha256Hex(AUDIO_SALT + w)).slice(0, 16);
+                        if (available.has(name)) recordingUrls.set(w, `audio/${name}.mp3`);
+                    }
+                } catch (e) {
+                    // No recordings: everything uses the device voice.
+                }
+            })();
+            return recordingsReady;
+        }
+
+        // Download the current list's clips ahead of time so taps play
+        // instantly.
+        async function prefetchRecordings(words) {
+            await recordingsReady;
+            for (const w of words) {
+                const url = recordingUrls.get(w);
+                if (!url || recordingBlobs.has(w)) continue;
+                recordingBlobs.set(w, null); // in flight
+                fetch(url)
+                    .then(r => (r.ok ? r.blob() : Promise.reject()))
+                    .then(b => recordingBlobs.set(w, URL.createObjectURL(b)))
+                    .catch(() => recordingBlobs.delete(w));
+            }
+        }
+
+        // Rank the device's voices. Natural/neural/enhanced voices (Edge,
+        // Apple downloads, Google's network voice) are far clearer than the
+        // default robotic ones; macOS novelty voices are excluded.
+        let deviceVoice = null;
+        const NOVELTY_VOICES = /\b(albert|bad news|bahh|bells|boing|bubbles|cellos|deranged|good news|hysterical|jester|organ|superstar|trinoids|whisper|wobble|zarvox|fred|junior|ralph|kathy|grandma|grandpa|rocko|shelley|flo|eddy|reed|sandy)\b|eloquence/i;
+        function pickDeviceVoice() {
+            if (!TTS_AVAILABLE) return;
+            let best = null, bestScore = -Infinity;
+            for (const v of window.speechSynthesis.getVoices()) {
+                const lang = (v.lang || '').replace('_', '-').toLowerCase();
+                if (!lang.startsWith('en')) continue;
+                let score = lang === 'en-us' ? 20 : 5;
+                if (/natural|neural|premium|enhanced/i.test(v.name)) score += 40;
+                if (/google us english/i.test(v.name)) score += 30;
+                if (/\b(samantha|ava|allison|susan|zoe|evan|nathan|joelle|noelle|aria|jenny|guy|michelle)\b/i.test(v.name)) score += 15;
+                if (/compact/i.test(v.name)) score -= 20;
+                if (NOVELTY_VOICES.test(v.name)) score -= 100;
+                if (v.default) score += 2;
+                if (score > bestScore) { bestScore = score; best = v; }
+            }
+            deviceVoice = best;
+        }
+        if (TTS_AVAILABLE) {
+            pickDeviceVoice();
+            // Voices load asynchronously in Chrome/Safari.
+            if (window.speechSynthesis.addEventListener) {
+                window.speechSynthesis.addEventListener('voiceschanged', pickDeviceVoice);
+            } else {
+                window.speechSynthesis.onvoiceschanged = pickDeviceVoice;
+            }
+        }
+
+        function stopSpeaking() {
+            player.pause();
+            if (TTS_AVAILABLE) window.speechSynthesis.cancel();
+            document.querySelectorAll('.btn-listen.speaking').forEach(b => b.classList.remove('speaking'));
+        }
+
+        function speakWithDevice(word, buttonEl) {
+            if (!TTS_AVAILABLE) return;
             const utter = new SpeechSynthesisUtterance(word);
-            utter.lang = 'en-US';
+            if (deviceVoice) utter.voice = deviceVoice;
+            utter.lang = deviceVoice ? deviceVoice.lang : 'en-US';
             utter.rate = 0.85; // a little slower than default, easier to catch
             if (buttonEl) {
-                // Remove pulse from any other button currently marked speaking.
-                document.querySelectorAll('.btn-listen.speaking').forEach(b => b.classList.remove('speaking'));
                 buttonEl.classList.add('speaking');
                 const clear = () => buttonEl.classList.remove('speaking');
                 utter.onend = clear;
                 utter.onerror = clear;
             }
             window.speechSynthesis.speak(utter);
+        }
+
+        // Everything here runs synchronously inside the tap, which iOS
+        // requires before it will make sound.
+        function speakWord(word, buttonEl) {
+            if (!word) return;
+            stopSpeaking();
+            const url = recordingUrls.get(word);
+            if (!url) {
+                speakWithDevice(word, buttonEl);
+                return;
+            }
+            player.src = recordingBlobs.get(word) || url;
+            try {
+                if ('mediaSession' in navigator && window.MediaMetadata) {
+                    navigator.mediaSession.metadata = new MediaMetadata({ title: 'Spelling Test' });
+                }
+            } catch (e) {}
+            if (buttonEl) {
+                buttonEl.classList.add('speaking');
+                const clear = () => buttonEl.classList.remove('speaking');
+                player.onended = clear;
+                player.onerror = clear;
+            }
+            player.play().catch(() => {
+                if (buttonEl) buttonEl.classList.remove('speaking');
+                speakWithDevice(word, buttonEl);
+            });
         }
 
         // ---------- Modal ----------
@@ -2230,6 +2344,8 @@
         renderHeader();
         buildTest();
         render();
+        loadRecordings();
+        prefetchRecordings(activeWords());
         const activeItem = document.querySelector('.sub-item.active');
         if (activeItem) activeItem.scrollIntoView({ block: 'nearest' });
     </script>
