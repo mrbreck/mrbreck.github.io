@@ -48,4 +48,23 @@ window.HOMEWORK_HELPER_SPELLING_LISTS = [
         ],
         challenge: ['across', 'idea'],
     },
+    {
+        id: 'u4-rome',
+        unit: 4,
+        title: 'Ancient Rome',
+        testDate: '2026-11-09',
+        words: [
+            'tarnish', 'marbles', 'portion', 'motor', 'circulate', 'servant',
+            'turkey', 'doctor', 'worship', 'surgery', 'immortal', 'sword',
+            'messenger', 'barbecue', 'giraffe', 'slurp', 'sir', 'mirth',
+        ],
+        challenge: ['above', 'beginning'],
+        // Content words are tagged "Content Word". Keep capitals for names.
+        content: ['Mediterranean'],
+        // Optional hand-picked wrong answers, used before generated ones.
+        distractors: {
+            sir: ['sur', 'ser', 'cir', 'surr'],
+            sword: ['sord', 'sowrd', 'swerd', 'soard'],
+        },
+    },
 ];

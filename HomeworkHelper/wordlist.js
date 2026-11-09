@@ -5,3 +5,10 @@ window.HOMEWORK_HELPER_DICTIONARY = new Set("the|of|and|to|in|for|is|on|that|by|
 ["washed", "pleas", "mousse", "muse", "nit", "nits", "mane", "nan", "mana",
  "faxes", "parson", "salves", "knaves", "laves", "witched", "mien", "mein", "mam"]
     .forEach(w => window.HOMEWORK_HELPER_DICTIONARY.add(w));
+
+// Ancient Rome list: real words / accepted variants never to offer as a
+// "misspelling" (e.g. "warship" for worship, "barbeque" for barbecue).
+["warship", "potion", "barbeque", "barbique", "stir", "sire", "sward", "swore",
+ "word", "serf", "mirthe", "girafe", "circular", "doctors", "turkeys",
+ "marble", "motors", "servants", "abode", "abovo"]
+    .forEach(w => window.HOMEWORK_HELPER_DICTIONARY.add(w));

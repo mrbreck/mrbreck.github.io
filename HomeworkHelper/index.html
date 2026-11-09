@@ -934,6 +934,16 @@
         // singular each plural came from (used for "wolfs"-style traps).
         const PLURAL_TO_SINGULAR = new Map();
 
+        const PROPER_FORMS = new Map(); // 'mediterranean' -> 'Mediterranean'
+
+        // Show a word (or a misspelling of it) the way it's written,
+        // capitalized when the real word is a name.
+        function displayForm(text, word) {
+            if (!PROPER_FORMS.has(word)) return text;
+            if (text === word) return PROPER_FORMS.get(word);
+            return text.charAt(0).toUpperCase() + text.slice(1);
+        }
+
         const SPELLING_LISTS = (window.HOMEWORK_HELPER_SPELLING_LISTS || [])
             .map(list => {
                 const words = [];
@@ -950,11 +960,19 @@
                 }
                 const challenge = (list.challenge || []).map(w => w.trim().toLowerCase());
                 challenge.forEach(push);
+                const content = (list.content || []).map(w => w.trim().toLowerCase());
+                content.forEach(push);
+                // Names like "Mediterranean" are shown with their capital.
+                for (const w of [...(list.words || []), ...(list.challenge || []), ...(list.content || [])]) {
+                    const t = w.trim();
+                    if (t !== t.toLowerCase() && !t.includes('/')) PROPER_FORMS.set(t.toLowerCase(), t);
+                }
                 return {
                     ...list,
                     date: parseLocalDate(list.testDate),
                     allWords: words,
                     challengeSet: new Set(challenge),
+                    contentSet: new Set(content),
                 };
             })
             .sort((a, b) => a.date - b.date);
@@ -977,6 +995,21 @@
         function activeChallengeSet() {
             const list = getList(state.listId);
             return list ? list.challengeSet : new Set();
+        }
+
+        function activeDistractors() {
+            const list = getList(state.listId);
+            return (list && list.distractors) || {};
+        }
+
+        function activeContentSet() {
+            const list = getList(state.listId);
+            return list ? list.contentSet : new Set();
+        }
+
+        // "Lesson 5" or the list's title, e.g. "Ancient Rome".
+        function listName(list) {
+            return list.lesson ? `Lesson ${list.lesson}` : (list.title || `Unit ${list.unit}`);
         }
 
         // ---------- Storage ----------
@@ -1550,6 +1583,7 @@
         function buildTest() {
             const words = [...activeWords()];
             const challenge = activeChallengeSet();
+            const contentWords = activeContentSet();
             const typed = currentMode() === 'typed';
             shuffle(words);
             // Exclude all other test words from each question's distractors so
@@ -1561,10 +1595,20 @@
                 if (!typed) {
                     const exclude = new Set(allTargets);
                     exclude.delete(lower);
-                    const misspellings = generateMisspellings(word, 3, exclude, state.filterRealWords);
+                    // Hand-picked wrong answers (for short words like "sir")
+                    // come first; the generator fills any gap.
+                    const custom = (activeDistractors()[lower] || []).filter(d => d !== lower);
+                    let misspellings = shuffle([...custom]).slice(0, 3);
+                    if (misspellings.length < 3) {
+                        const more = generateMisspellings(word, 3, new Set([...exclude, ...misspellings]), state.filterRealWords);
+                        misspellings = misspellings.concat(more).slice(0, 3);
+                    }
                     choices = shuffle([lower, ...misspellings]);
                 }
-                return { word: lower, choices, selected: null, typed: '', challenge: challenge.has(lower) };
+                return {
+                    word: lower, choices, selected: null, typed: '',
+                    challenge: challenge.has(lower), content: contentWords.has(lower),
+                };
             });
             state.graded = false;
         }
@@ -1605,7 +1649,7 @@
                     <li>
                         <button class="${cls.join(' ')}" data-list="${escapeHtml(list.id)}">
                             <span class="sub-title">Week of ${fmtShort(weekStart(list.date))} ${badge}</span>
-                            <span class="sub-meta">Lesson ${list.lesson} &middot; Test ${fmtTest(list.date)}</span>
+                            <span class="sub-meta">${escapeHtml(listName(list))} &middot; Test ${fmtTest(list.date)}</span>
                         </button>
                     </li>`);
             }
@@ -1624,7 +1668,7 @@
             const subtitle = document.getElementById('subtitle');
             const addBtn = document.getElementById('add-words-btn');
             if (list) {
-                subtitle.textContent = `Unit ${list.unit}, Lesson ${list.lesson} · Test on ${fmtLong(list.date)}`;
+                subtitle.textContent = `Unit ${list.unit}, ${listName(list)} · Test on ${fmtLong(list.date)}`;
                 addBtn.style.display = 'none';
             } else {
                 subtitle.textContent = 'Add your spelling words, then take the quiz.';
@@ -1770,7 +1814,9 @@
         const LISTEN_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M3 10v4h4l5 4V6L7 10H3zm11 2a3 3 0 0 0-2-2.82v5.64A3 3 0 0 0 14 12zm-2-7.5v1.54c2.3.57 4 2.67 4 5.26s-1.7 4.69-4 5.26v1.54c3.16-.65 5.5-3.44 5.5-6.8S15.16 4.75 12 4.5z"/></svg>';
 
         function questionLabel(q, qIdx) {
-            return `Question ${qIdx + 1}${q.challenge ? '<span class="tag-challenge">Challenge</span>' : ''}`;
+            const tag = q.challenge ? '<span class="tag-challenge">Challenge</span>'
+                : q.content ? '<span class="tag-challenge">Content Word</span>' : '';
+            return `Question ${qIdx + 1}${tag}`;
         }
 
         function choiceQuestionHtml(q, qIdx) {
@@ -1793,7 +1839,7 @@
                 return `
                     <label class="${cls}">
                         <input type="radio" name="q${qIdx}" value="${cIdx}" ${isSelected ? 'checked' : ''} ${state.graded ? 'disabled' : ''}>
-                        <span>${escapeHtml(choice)}</span>
+                        <span>${escapeHtml(displayForm(choice, q.word))}</span>
                         ${mark}
                     </label>`;
             }).join('');
@@ -1843,7 +1889,7 @@
                             <span class="mark">${right ? '&#10003;' : '&#10007;'}</span>
                         </div>
                     </div>
-                    ${right ? '' : `<div class="correct-spelling">Correct spelling: <strong>${escapeHtml(q.word)}</strong></div>`}
+                    ${right ? '' : `<div class="correct-spelling">Correct spelling: <strong>${escapeHtml(displayForm(q.word, q.word))}</strong></div>`}
                 </div>`;
         }
 
