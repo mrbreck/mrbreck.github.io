@@ -1924,11 +1924,18 @@
                     if (!(window.crypto && crypto.subtle)) return;
                     const res = await fetch('audio/index.json', { cache: 'no-cache' });
                     if (!res.ok) return;
-                    const available = new Set(await res.json());
+                    // { hash: version } (older manifests were a plain list).
+                    const data = await res.json();
+                    const available = Array.isArray(data)
+                        ? new Map(data.map(n => [n, '']))
+                        : new Map(Object.entries(data));
                     const words = new Set(SPELLING_LISTS.flatMap(l => l.allWords));
                     for (const w of words) {
                         const name = (await sha256Hex(AUDIO_SALT + w)).slice(0, 16);
-                        if (available.has(name)) recordingUrls.set(w, `audio/${name}.mp3`);
+                        if (!available.has(name)) continue;
+                        const v = available.get(name);
+                        // ?v= changes when a clip is re-recorded, so no stale audio.
+                        recordingUrls.set(w, `audio/${name}.mp3${v ? `?v=${v}` : ''}`);
                     }
                 } catch (e) {
                     // No recordings: everything uses the device voice.

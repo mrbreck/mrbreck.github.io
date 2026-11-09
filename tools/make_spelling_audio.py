@@ -2,7 +2,7 @@
 """Pre-record every word in HomeworkHelper/spelling-lists.js with a clear
 neural voice (Kokoro af_heart), the way a teacher gives a spelling test:
 
-    "Sword."  "The soldier carried a sharp sword."  "Sword."
+    "The word is sword. The soldier carried a sharp sword. Sword."
 
 Sentences come from tools/spelling-sentences.json; a word without one is
 just said once.
@@ -23,6 +23,7 @@ import argparse
 import hashlib
 import json
 import pathlib
+import re
 import subprocess
 
 import numpy as np
@@ -34,15 +35,14 @@ SENTENCES = ROOT / "tools" / "spelling-sentences.json"
 OUT_DIR = ROOT / "HomeworkHelper" / "audio"
 
 VOICE = "af_heart"
-WORD_SPEED = 0.9       # the word itself, a touch slower
-SENTENCE_SPEED = 1.0   # sentences at a natural pace
-PAUSE = 0.7            # seconds between word / sentence / word
+SPEED = 0.92           # a touch slower than normal, still natural
 SAMPLE_RATE = 24000
 SALT = "hh-audio::"
 
-# Homographs the voice would say wrong for the list. Value is phonemes.
+# Pronunciations to force, as phonemes (used everywhere the word is said).
 PRONUNCIATIONS = {
-    "lives": "lˈaɪvz",  # plural of life, not "he lives"
+    "lives": "lˈaɪvz",                       # plural of life, not "he lives"
+    "mediterranean": "mˌɛdətəɹˈeɪniən",       # med-uh-tuh-RAY-nee-un
 }
 
 
@@ -68,25 +68,40 @@ def silence(seconds: float) -> np.ndarray:
     return np.zeros(int(seconds * SAMPLE_RATE), dtype=np.float32)
 
 
-def say(kokoro: Kokoro, text: str, speed: float, phonemes: bool = False) -> np.ndarray:
-    samples, sr = kokoro.create(text, voice=VOICE, speed=speed, lang="en-us",
-                                is_phonemes=phonemes)
-    assert sr == SAMPLE_RATE
-    return samples.astype(np.float32)
+def american(ph: str) -> str:
+    # The phonemizer writes the "er/ir/ur" vowel British-style with no R
+    # (sir -> "sɜː"); the American voice needs it R-colored ("sɜɹ").
+    return re.sub(r"ɜː(?!ɹ)", "ɜɹ", ph)
 
 
-def say_word(kokoro: Kokoro, word: str) -> np.ndarray:
-    if word in PRONUNCIATIONS:
-        return say(kokoro, PRONUNCIATIONS[word] + ".", WORD_SPEED, phonemes=True)
-    return say(kokoro, word.capitalize() + ".", WORD_SPEED)
+def phonemes_for(kokoro: Kokoro, text: str) -> str:
+    out = []
+    for token in re.findall(r"[A-Za-z']+|[^A-Za-z']+", text):
+        key = token.lower()
+        if key in PRONUNCIATIONS:
+            out.append(PRONUNCIATIONS[key])
+        elif re.match(r"[A-Za-z']", token):
+            out.append(american(kokoro.tokenizer.phonemize(token, "en-us")).strip())
+        else:
+            out.append(token)
+    return "".join(out)
+
+
+def script(word: str, sentence: str | None) -> str:
+    # Never start the clip with the spelling word: this voice adds a little
+    # "i" sound at the very start of a recording ("islurp" for slurp).
+    if sentence:
+        return f"The word is {word}. {sentence} {word.capitalize()}."
+    return f"The word is {word}."
 
 
 def record(kokoro: Kokoro, word: str, sentence: str | None) -> np.ndarray:
-    w = say_word(kokoro, word)
-    parts = [w]
-    if sentence:
-        parts += [silence(PAUSE), say(kokoro, sentence, SENTENCE_SPEED), silence(PAUSE), w]
-    audio = np.concatenate(parts)
+    # One pass over the whole clip: this voice garbles a word synthesized on
+    # its own, but says it right with the rest of the clip around it.
+    samples, sr = kokoro.create(phonemes_for(kokoro, script(word, sentence)),
+                                voice=VOICE, speed=SPEED, lang="en-us", is_phonemes=True)
+    assert sr == SAMPLE_RATE
+    audio = samples.astype(np.float32)
     audio = audio / (float(np.max(np.abs(audio))) or 1.0) * 0.89  # about -1 dBFS
     # Lead-in because some speakers/Bluetooth clip the first moment.
     return np.concatenate([silence(0.15), audio, silence(0.25)]).astype(np.float32)
@@ -123,9 +138,12 @@ def main() -> None:
 
     # Manifest of which recordings exist (hashes only), so the page knows
     # up front whether to play a file or use the device voice.
-    names = sorted(p.stem for p in OUT_DIR.glob("*.mp3"))
-    (OUT_DIR / "index.json").write_text(json.dumps(names) + "\n")
-    print(f"recorded {made} word(s) into {OUT_DIR.relative_to(ROOT)} ({len(names)} total)")
+    # Value is a short content hash, used as ?v= so a re-recorded clip is
+    # never served stale from a browser cache.
+    manifest = {p.stem: hashlib.sha256(p.read_bytes()).hexdigest()[:8]
+                for p in sorted(OUT_DIR.glob("*.mp3"))}
+    (OUT_DIR / "index.json").write_text(json.dumps(manifest) + "\n")
+    print(f"recorded {made} word(s) into {OUT_DIR.relative_to(ROOT)} ({len(manifest)} total)")
 
 
 if __name__ == "__main__":
