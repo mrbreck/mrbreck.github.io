@@ -67,4 +67,26 @@ window.HOMEWORK_HELPER_SPELLING_LISTS = [
             sword: ['sord', 'sowrd', 'swerd', 'soard'],
         },
     },
+    {
+        id: 'u4-myths',
+        unit: 4,
+        title: 'Roman Myths',
+        testDate: '2026-11-13',
+        words: [
+            'Greeks', 'meter', 'Venus', 'asleep', 'secret', 'agreed', 'seed',
+            'succeeded', 'cedar', 'breed', 'create', 'jamboree', 'speech',
+            'degree', 'retail', 'screech', 'scenic', 'tedious',
+        ],
+        challenge: ['except', 'follow'],
+        content: ['Psyche'],
+        distractors: {
+            psyche: ['syche', 'psychee', 'sykee', 'psiche'],
+            except: ['exept', 'exsept', 'ecxept', 'excepte'],
+            meter: ['meeter', 'meator', 'metor', 'meetur'],
+            seed: ['sead', 'sede', 'seid', 'ceed'],
+            breed: ['brede', 'breid', 'breede', 'bried'],
+            greeks: ['greaks', 'greks', 'greecks', 'grieks'],
+            follow: ['folow', 'follo', 'folloe', 'fallo'],
+        },
+    },
 ];

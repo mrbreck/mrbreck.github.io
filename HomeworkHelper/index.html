@@ -1624,6 +1624,15 @@
             return monday;
         }
 
+        // The week a list is studied: the week before its test day, so a
+        // Monday test counts as the previous week's list (Mon 11/9 -> Nov 2)
+        // and doesn't collide with that Friday's list.
+        function studyWeek(testDate) {
+            const dayBefore = new Date(testDate);
+            dayBefore.setDate(testDate.getDate() - 1);
+            return weekStart(dayBefore);
+        }
+
         function renderSidebar() {
             const ul = document.getElementById('spelling-sub-list');
             const today = todayLocal();
@@ -1648,7 +1657,7 @@
                 items.push(`
                     <li>
                         <button class="${cls.join(' ')}" data-list="${escapeHtml(list.id)}">
-                            <span class="sub-title">Week of ${fmtShort(weekStart(list.date))} ${badge}</span>
+                            <span class="sub-title">Week of ${fmtShort(studyWeek(list.date))} ${badge}</span>
                             <span class="sub-meta">${escapeHtml(listName(list))} &middot; Test ${fmtTest(list.date)}</span>
                         </button>
                     </li>`);

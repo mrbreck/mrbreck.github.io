@@ -43,6 +43,10 @@ SALT = "hh-audio::"
 PRONUNCIATIONS = {
     "lives": "lˈaɪvz",                       # plural of life, not "he lives"
     "mediterranean": "mˌɛdətəɹˈeɪniən",       # med-uh-tuh-RAY-nee-un
+    "jamboree": "dʒˌæmbəɹˈiː",                # jam-buh-REE
+    "meter": "mˈiːtɚ",                        # clear T, not "meeder"
+    "psyche": "sˈaɪkiː",                      # SY-kee (the myth's name)
+    "except": "ɪksˈɛpt",                      # ik-SEPT; default sounded like "accept"
 }
 
 
